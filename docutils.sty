@@ -17,6 +17,12 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \RequirePackage{xcolor}%颜色
 \RequirePackage{listings}
+\RequirePackage{algorithm}
+\RequirePackage{algorithmicx}
+\RequirePackage[noend]{algpseudocode}
+% \RequirePackage{arevmath}
+
+
 \lstdefinestyle{lstStyleBase}{%
    basicstyle=\small\ttfamily,
    aboveskip=\medskipamount,
@@ -69,6 +75,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \RequirePackage{metalogo}%XeLaTeX Logo
 \RequirePackage{xspace}%TeXLive Logo
+\renewcommand{\thealgorithm}{\thechapter.\arabic{algorithm}}
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
 \DeclareRobustCommand{\BibTeX}{B\kern-.05em%
     \hbox{$\m@th$% %% force math size calculations
           \csname S@\f@size\endcsname

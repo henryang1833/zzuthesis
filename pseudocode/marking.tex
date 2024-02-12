@@ -1,0 +1,47 @@
+\begin{algorithm}
+    \small
+    \caption{Packet Marking Algorithm}
+        \begin{algorithmic}[1] %每行显示行号
+            
+            \Require m
+
+            \Require  packet
+            % \Comment{待转发的数据包}
+
+            \Require srcInterface
+            % \Comment{数据包在路由器中的来源接口号}
+
+            %if
+            \If {packet.TTL == 0}   \State 
+                Drop the packet and exit this program
+            \Else   
+                \State  set INITIAL\_TTL the minimum value greater than Packet.TTL from \{32, 64, 128, 255\}
+                \State  index = (INITIAL\_TTL - packet.TTL) \% group\_size
+                \If  {index == 0} 
+                    \If {packet.TTL == INITIAL\_TTL} \State
+                        set all interface  mark fields to empty \State
+                        packet.interfaces[0] = srInterface \State
+                        packet.xor1 = srInterface \State
+                        packet.allowing\_marking = True
+                    \ElsIf{packet.allowing\_marking == True}   \State
+                        r = random.random()
+                        \If{r $<$ marking\_rate} \State
+                            set all interface  mark fields to empty \State
+                            packet.interfaces[0] = srInterface \State
+                            packet.xor1 = packet.xor1 $\oplus$ srInterface \State
+                            packet.allowing\_marking = True
+                        \Else \State 
+                            packet.allowing\_marking = False
+                        \EndIf
+                    \EndIf
+                \ElsIf{packet.interfaces[index] is empty} \State
+                    packet.interfaces[index] = srInterface \State
+                    packet.xor1 = packet.xor1 $\oplus$ srInterface
+                \EndIf  \State
+                packet.TTL -= 1 \State
+                packet.xor2 = packet.xor2 $\oplus$ srInterface
+            \EndIf
+            \State
+        \end{algorithmic}
+        \label{alg:packet_marking}
+    \end{algorithm}

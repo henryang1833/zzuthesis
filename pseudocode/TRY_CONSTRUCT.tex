@@ -1,0 +1,55 @@
+\begin{algorithm}[htbp]
+    \small
+    \caption{TRY\_CONSTRUCT Procedure}
+    \begin{algorithmic}[1] %每行显示行号
+        \Procedure{try\_construt}{base\_packet,$U$,$current\_interface\_path$, 
+        $result\_interface\_paths$,remaining\_ipath\_length}
+        \State xor1 = base\_packet.xor1 
+        \State $packet\_path$ = reverse(base\_packet.interfaces\_group) \Comment{Reverse sequence of interface numbers in the data packet}
+        \State append\_num = 0
+        \For {each interface\_num in $packet\_path$}
+            \If{interface\_num $\not=$ EMPTY\_VALUE}
+            \State  $current\_interface\_path$ = $current\_interface\_path$ + \{interface\_num\}
+            \State append\_num += 1
+            \State remaining\_ipath\_length -= 1
+            \State xor1 = xor1 $\oplus$ interface\_num
+            \EndIf
+        \EndFor
+        \If{remaining\_ipath\_length == 0}
+            \If{xor1 == EMPTY\_VALUE}
+                \State $result\_interface\_paths$ +=  $current\_interface\_path$
+                \State $current\_interface\_path$ = \{\}
+                \State \Return True
+            \Else
+                \State remove the last append\_num items from $current\_interface\_path$
+                \State \Return False
+            \EndIf
+        \Else 
+            \State Initial an empty set $packets$
+            \For {each packet in $U$}
+                \If {packet.xor1 == xor1}
+                    \State $packets$ += \{packet\}
+                \EndIf
+            \EndFor
+            \If {$|packets|$== 0}
+                \State remove the last append\_num items from $current\_interface\_path$
+                \State \Return False
+            \Else
+                \For{each packet in $packets$}
+                    \State $U$ = $U$ - \{packet\}
+                    \State flag = \Call{try\_construct}{packet, $U$,$result\_interface\_paths$,
+                    $current\_interface\_path$,remaining\_ipath\_length} 
+                    \If{flag == True}
+                    \State \Return True
+                    \Else
+                        \State $U$ += \{packet\}
+                    \EndIf
+                \EndFor
+                \State remove the last append\_num items from $current\_interface\_path$
+                \State \Return False
+            \EndIf
+        \EndIf
+        \EndProcedure 
+    \end{algorithmic}
+    \label{alg:try_construct}
+\end{algorithm}
