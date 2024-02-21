@@ -1,0 +1,66 @@
+\begin{algorithm}[htbp]
+    \small
+    \caption{Path Reconstruction Algorithm}
+    \begin{algorithmic}[1] %每行显示行号
+
+        \Require $S$ \Comment{all marked packets set recived in victim}
+        \Ensure $result\_router\_paths$
+        \State Initial an empty set $S'$
+        \State Initial an empty set $result\_interface\_paths$
+        \State Initial an empty set $result\_router\_paths$
+        \State is\_multiple\_of\_group\_size = (INITIAL\_TTL - key\_TTL)\%group\_size == 0
+        \Comment{Indicate whether the path length is a multiple of the group length}
+        \State partition $S$ into different subsets and add in set $S'$ based on packet.TTL and packet.xor2 fields 
+        %if
+        \For{each subset $U$ in set $S'$} 
+            \State Initial an empty set $T$ \Comment{The root data packets used for reconstruction}
+            \State  set INITIAL\_TTL the minimum value greater than Packet.TTL from \{32, 64, 128, 255\}
+            \For{each packet in subset $U$}
+                \State set interface\_count to count of valid interfaces in packet's mark field
+                \If{is\_multiple\_of\_group\_size }
+                    \If{interface\_count $\not=$ group\_size}
+                        \State $U$ = $U$-\{packet\}
+                    \ElsIf {packet.xor1==packet.xor2}
+                        \State  $T$ = $T$+\{packet\}
+                    \EndIf
+                \ElsIf {interface\_count $\not=$ group\_size}
+                    \State $U$ = $U$-\{packet\}
+                    \If {interface\_count == (INITIAL\_TTL - key\_TTL) \% group\_size and packet.xor1 == packet.xor2}
+                        \State $T$ = $T$+\{packet\}
+                    \EndIf
+                \EndIf
+            \EndFor
+        
+            \For {each packet in set $T$}
+                \State Initial an empty set $current\_interface\_path$
+                \State remaining\_ipath\_length = INITIAL\_TTL - key\_TTL
+                \State flag = \Call{try\_construct}{packet, $U$,$result\_interface\_paths$, $current\_interface\_path$,remaining\_ipath\_length}   
+                \If{flag == False and is\_multiple\_of\_group\_size}
+                    \State $U$ = $U$+\{packet\} \Comment{Restore $U$ to its state before calling 'try\_construct'}
+                \EndIf
+            \EndFor
+        \EndFor
+        
+
+        \For{each $interface\_path$ in $result\_interface\_paths$}
+            \State current\_router = victim\_router
+            \State $reconstructed\_path$ = \{current\_router\}
+            \For{each interface\_num in $interface\_path$}
+                \If {interface\_num - 1 $<$ len(neighbors,current\_router)}
+                    \State next\_router = get\_router\_by\_interface(interface\_num,current\_router)
+                    \State $reconstructed\_path$ = $reconstructed\_path$ + \{next\_router\}
+                    \State current\_router = next\_router
+                \Else
+                    \State $reconstructed\_path$ = \{\}
+                    \State break
+                \EndIf
+            \EndFor
+
+            \If {len($reconstructed\_path$) $>$ 0}
+                \State $result\_router\_paths$ = $result\_router\_paths$+ reverse($reconstructed\_path$)
+            \EndIf
+
+        \EndFor
+    \end{algorithmic}
+    \label{alg:path_reconstruction}
+\end{algorithm}

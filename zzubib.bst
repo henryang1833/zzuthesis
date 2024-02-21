@@ -954,33 +954,52 @@ FUNCTION {format.publisher}
   if$
 }
 
+% FUNCTION {format.address.publisher}
+% { address empty$ not
+%     { address
+%       format.publisher empty$ not
+%         { bbl.colon * format.publisher * }
+%         { entry.is.electronic not show.missing.address.publisher and
+%             { bbl.colon * bbl.sine.nomine * }
+%             'skip$
+%           if$
+%         }
+%       if$
+%     }
+%     { entry.is.electronic not show.missing.address.publisher and
+%         { format.publisher empty$ not
+%             { bbl.sine.loco bbl.colon * format.publisher * }
+%             { bbl.sine.loco.sine.nomine }
+%           if$
+%         }
+%         { format.publisher empty$ not
+%             { format.publisher }
+%             { "" }
+%           if$
+%         }
+%       if$
+%     }
+%   if$
+% }
+
 FUNCTION {format.address.publisher}
-{ address empty$ not
-    { address
-      format.publisher empty$ not
-        { bbl.colon * format.publisher * }
-        { entry.is.electronic not show.missing.address.publisher and
-            { bbl.colon * bbl.sine.nomine * }
-            'skip$
-          if$
-        }
+{ address empty$
+    { publisher empty$
+        { "" }
+        { publisher }
       if$
     }
-    { entry.is.electronic not show.missing.address.publisher and
-        { format.publisher empty$ not
-            { bbl.sine.loco bbl.colon * format.publisher * }
-            { bbl.sine.loco.sine.nomine }
-          if$
-        }
-        { format.publisher empty$ not
-            { format.publisher }
-            { "" }
-          if$
-        }
+    { address
+      publisher empty$
+        { "" }
+        { bbl.colon * publisher * }
       if$
     }
   if$
 }
+
+
+
 
 FUNCTION {extract.before.dash}
 { duplicate$ empty$
