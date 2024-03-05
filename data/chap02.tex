@@ -114,6 +114,7 @@ d类攻击将攻击者所处子网内的地址作为源地址，因为入口过�
 受害者$V$一旦达到收敛状态后，便可根据这些标记信息使用一定的算法来执行路径重构过程，即受害者$V$会根据受到的标记信息执行相应算法找到攻击源。
 
 \section{遗传算法\cite{zhou2006matlab}}
+\label{sec:GA}
 \subsection{遗传算法概述}
 遗传算法(Genetic Algorithm，简称GA)是一种搜索启发式算法，受到生物进化理论的启发。
 它通过模拟模拟自然界中生物进化的机制,如\textbf{遗传(Heredity)}、\textbf{变异(Mutation)}、\textbf{交配(Crossover )}和\textbf{选择(Selection)}来解决优化和搜索问题。
@@ -145,8 +146,6 @@ d类攻击将攻击者所处子网内的地址作为源地址，因为入口过�
   \item \textbf{变异（Mutation）：}在遗传算法中，变异是指随机改变个体的染色体中的一些基因，以引入新的遗传多样性。这可以帮助算法避免局部最优解，探索更广泛的搜索空间。
   
   \item \textbf{代（Generation）：}遗传算法的一个迭代步骤，在其中通过选择、交叉和变异操作创建一个新的种群。
-  
-  \item \textbf{精英保留（Elitism）：}一种策略，其中一代中的一个或多个最优个体被保留到下一代，以确保解决方案的质量不会退化。
   \end{enumerate}
 
   基本遗传算法(也称标准遗传算法或简单遗传算法，Simple Genetic Algorithm，简称SGA)是一种群体型操作，该操作以群体中的所有个体为对象，只使用基本遗传算子(Genetic Operator)：选择算子(Selection Operator)、交叉算子(Crossover Operator)和变异算子(Mutation Operator)。
@@ -248,7 +247,7 @@ d类攻击将攻击者所处子网内的地址作为源地址，因为入口过�
 举轮盘赌选择法为例，设定种群总数为M，第i个个体的适应度记作$f_i$，其被选为下一代的概率可以表示为:
 \begin{equation}
   \label{eq:selection}
-  P_i = \frac{f_i}{\sum_{k=1}^{M} f_k}
+  P_i = \frac{f_i}{\sum\limits_{k=1}^{M} f_k}
 \end{equation}
 确定个体被选中的几率后，通过生成一个[0,1]范围内的随机数来选出参与繁殖的个体。
 如果一个个体的选中几率较高，它可能会被选中多次，导致其基因在种群中广泛传播；反之，选中几率低的个体可能会被逐渐淘汰。
@@ -502,7 +501,7 @@ BiGRU包含两个GRU层，一个沿正时间方向处理数据（正向GRU），
 这两个层的输出通常会在每个时间步被合并，以提供给定时间点前后的完整上下文信息。
 另外，从GRU继承的更新门和重置门可以使模型在每个方向上更有效地学习长期和短期依赖性。
 
-对于一个输入序列 $X = x_1 x_2 \dots x_T$BiGRU模型的前向计算可以表示为：
+对于一个输入序列 $X = x_1 x_2 \dots x_T$，BiGRU模型的前向计算可以表示为：
 \begin{gather}
   \overleftarrow{h_t} = GRU_1(x_t,\overleftarrow{h_{t-1}}) \label{eq:bigru_htleft} \\
   \overrightarrow{h_t} = GRU_1(x_t,\overrightarrow{h_{t-1}}) \label{eq:bigru_htright} \\
