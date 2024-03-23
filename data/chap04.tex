@@ -1,722 +1,656 @@
 %%================================================
-%% Filename: chap04.tex
+%% Filename: chap03.tex
 %% Encoding: UTF-8
 %% Author: Yuan Xiaoshuai - yxshuai@gmail.com
-%% Created: 2012-04-28 00:15
-%% Last modified: 2019-11-06 17:39
+%% Created: 2012-04-27 19:47
+%% Last modified: 2019-11-07 14:38
 %%================================================
-\chapter{基于特征选择优化的 ResNet-BiGRU 分类检测模型}
-\label{cha:ResNet-BiGRU}
+\chapter{基于接口号分组标记的溯源防护方法}
+% \chapter{基于接口号分组的概率标记法}
+\label{cha:IGPPM}
+针对传统概率包标记法在进行网络溯源时表现出的溯源准确率不高、溯源速度慢的缺点，本小节对此进行了改进，设计并提出了一种基于路由器接口号分组的概率包标记方案。
+与传统依赖于IP地址作为标记信息的方案相比，该方案通过使用路由器接口号作为标记信息，显著减少了对单个路由信息进行标记所需的空间。
+此外，通过结合异或运算的特性，本方案能够利用服务器端收集到的数据包标记信息在确保溯源准确率的同时进行快速而准确的路径重构。
 
-在现代网络安全领域，快速准确地检测潜在攻击的能力至关重要。
-但是，我们面临的挑战在于，传统的攻击检测方法往往依赖于预先定义的特征集，这可能导致对新型攻击的检测能力不足，因为它们无法适应不断变化的攻击模式。
-另外，实际的流量数据有着海量高维的特点，然而常规的算法通常不会针对这种特点进行调整适应，往往结果是生成的模型在实际部署中准确率低、误报率高。
-因此，为了能够解决这种概念漂移问题和能够有效挖掘复杂网络数据的深层特征以达到更高的检测精度，我们引入了基于特征选择优化的 ResNet-BiGRU 分类检测模型。
-图~\ref{fig:attack_detecion_model}~描述了我们的检测模型的工作原理和流程。
-\begin{figure}[htbp]
+% 传统的PPM（概率包标记法）通常使用路由器的IP地址作为标记信息，然而IP地
+% 址是相对于全球的网络设备的，占用空间大，为32 bit。故PPM通常只会携带一
+% 个路由器的标记信息，这导致了概率包标记法的空间利用率较低，为$1/32 = 
+% 0.03125$。这也是为什么传统的概率包标记法需要收集更多数据包以进行路径
+% 重构的原因。
+
+% 在本文中，我们将采用一种不同的方案：利用路由器的接口号作为标记信息。IP
+% 地址是相对于全球网络设备的，而路由器接口号仅相对于单个路由器内的所有网
+% 络接口，所以对单个路由器内的每个接口进行编码将消耗更少的空间。这意味着
+% 我们可以在一个数据包中标记多个路由器的信息，提高了标记空间的利用率，从
+% 而提高了路径重构的效率，减少了需要收集的数据包数量。这将显著改善数据包
+% 标记法进行IP回溯的性能和有效性。
+
+\section{方案总体设计}
+
+本文提出的方案旨在针对网络攻击进行高效、准确地溯源，该方案主要分为三个阶段：路由器标记阶段、标记数据包收集阶段和路径重组阶段。
+这三个阶段如图~\ref{fig:our_datapackets_design}~所示。
+\begin{figure}[h]
   \centering
-  \includegraphics[width = 0.8\textwidth]{ourmodel.drawio.png}
-  \caption{基于特征选择优化的 ResNet-BiGRU 分类检测模型}
-  \label{fig:attack_detecion_model}
+  \includegraphics[width = \textwidth]{datapackets.drawio.png}
+  \caption{基于接口号分组的概率标记法总体设计}
+  \label{fig:our_datapackets_design}
 \end{figure}
+首先是数据包标记阶段，它是网络追踪的起始步骤，发生在数据包于网络路径上的传输过程中。
+当数据包离开发送者设备进入网络后，中间路由器便会根据预设策略对经过的数据包进行概率性标记，写入到本文接下来将要提出的标记信息结构体中，以便路径重构程序有效利用这些信息准确完成路径重构。
 
+其次是标记数据包收集阶段，这一环节主要在受害者服务器上进行。
+一旦受害者服务器检测到攻击行为，便会立即启动收集机制，专门对携带标记信息的攻击数据包进行收集。
+值得注意的是，这一收集过程与路由器标记阶段可以并行进行，从而提高追踪效率。
 
-模型首先采用遗传算法对分层抽样过程进行优化，保证训练集的质量；
-之后利用互信息冗余算法进行特征降维来提高算法效率减少过拟合的风险；
-训练采用增量学习的方式适应不断变化的攻击模式，减少对数据集的依赖性；
-最后利用ResNet-BiGRU的优势来解决深度网络中的梯度消失问题、捕捉时间序列数据中的长期依赖关系，从而挖掘复杂网络数据的深层特征，提高检测精度和准确率。
-接下来，我们将详细地从实验数据集、数据集预处理、模型具体结构设计、实验设置、实验结果逐步展开介绍。
+当服务器成功收集到足够数量的标记数据包后，便进入路径重组阶段。
+在这一阶段，通过利用服务器所收集到的带有标记信息的攻击数据包，执行路径重构算法，我们便能够实现对攻击源的精准定位。
+接下来，本文将首先介绍一种专门用于记录数据包标记信息的结构体，随后会围绕前述提到的三个关键阶段展开详细叙述，逐步深入剖析其方案的原理和流程。
+\section{标记信息结构体：MarkInfo}
+路由器对数据包进行标记的过程，实质上就是路由器将自身的信息写入到数据包的过程。
+数据包在网络路径上传输时，可能会经历多个这样的标记过程，直至最终抵达服务器。
+对于服务器而言，要完成路径重构，就必须从数据包中提取出这些标记过程产生的信息以及这些信息的关系。
+因此，如何在数据包中有效组织并存储这些信息及其关系显得尤为重要。
+基于这一需求，本文设计并提出了一种专门在数据包中存储和组织这些标记信息的结构体(如图~\ref{fig:data_structure}~所示)：MarkInfo。
 
-\section{实验数据集}
-\subsection{UNSW-NB15数据集\cite{moustafa2015comprehensive}}
-UNSW-NB15数据集由澳大利亚新南威尔士大学的网络安全实验室开发，旨在克服以往数据集的不足并提供更实际的测试环境。
-与早期的KDD Cup 99和NSL-KDD数据集相比，UNSW-NB15引入了一系列的改进和特色，以适应网络威胁检测的新要求。
-这些改进体现在数据集的构成、攻击类型的多样性以及数据的实用性和代表性上。
-
-\begin{table}[htbp]
-  \caption{UNSW-NB15流量分布及其描述}
-  \label{tab:UNSW-NB15_distribution}
-  \begin{tabularx}{\textwidth}{@{}cccX@{}}
-    \toprule
-      \multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{占比（\%）}} & \multicolumn{1}{c}{\textbf{描述}}\\
-    \midrule
-  Normal & 2218761 & 87.35\% & 正常数据 \\
-
-  Fuzzers & 24246 & 0.95\% & 通过向程序或网络输入随机数据尝试使其悬挂或暂停的攻击 \\
-
-  Analysis & 2677 & 0.11\% & 包含不同的端口扫描、垃圾邮件和html文件渗透攻击 \\
-
-  Backdoors & 2329 & 0.09\% & 一种秘密绕过系统安全机制以访问计算机或其数据的技术 \\
-
-  DoS & 16353 & 0.64\% & 恶意尝试使服务器或网络资源对用户不可用，通常通过暂时中断或悬挂连接到互联网的主机的服务来实现 \\
-
-  Exploits & 44525 & 1.75\% & 攻击者了解操作系统或软件内的安全问题，并利用这一点通过利用漏洞进行攻击 \\
-
-  Generic & 215481 & 8.48\% & 一种针对所有给定块大小和密钥大小的分组密码的技术，不考虑分组密码的结构 \\
-
-  Reconnaissance & 13987 & 0.55\% & 包含所有可以模拟收集信息攻击的攻击 \\
-
-  Shellcode & 1511 & 0.06\% & 利用软件漏洞进行攻击的载荷中的一小段代码 \\
-
-  Worms & 174 & 0.01\% & 攻击者复制自身以便传播到其他计算机，通常使用计算机网络传播，依赖于目标计算机上的安全漏洞进行传播 \\
-  \bottomrule
-  \end{tabularx}
-  \end{table}
-
-首先，UNSW-NB15数据集通过包含更现代的攻击类型，如DoS、蠕虫、后门攻击和Fuzzers等（关于具体的攻击种类详见表~\ref{tab:UNSW-NB15_class}~，数据集类别占比详见表~\ref{tab:UNSW-NB15_distribution}~和图~\ref{fig:UNSW-NB15barchart}~）。
-这种多样化的攻击样本集合使得数据集不仅能够用于传统的入侵检测研究，也适用于评估面对新型攻击行为的检测系统的效果。
-
-  
-  \begin{figure}[htbp]
-    \centering
-    \includegraphics[width = 0.8\textwidth]{UNSW-NB15barchart.png}
-    \caption{UNSW-NB15数据集分布占比饼状图}
-    \label{fig:UNSW-NB15barchart}
-    \end{figure}
-
-
-其次，UNSW-NB15提供了四个CSV格式的数据记录文件，每个文件中都包含了攻击记录和正常记录。这些CSV文件分别命名为UNSWNB15\_1.csv、UNSW-NB15\_2.csv、UNSW NB15\_3.csv和UNSW-NB15\_4.csv。
-在每个CSV文件中，所有记录都根据最后一个时间属性进行了排序。前三个CSV文件中，每个文件包含700,000条记录；第四个文件包含440,044条记录，共2,540,044条记录。
-
-
-海量的数据集不仅有助于模型的训练和验证，也提高了入侵检测模型在实际环境中应用的可信度和有效性。
-此外，UNSW-NB15数据集在设计时注重了实用性和代表性，通过模拟现实世界的网络环境和流量模式，确保了数据集的广泛适用性和长期价值。
-这使得该数据集成为评估和比较不同入侵检测技术性能的理想选择。
-\begin{table}[htbp]
-  \caption{UNSW-NB15数据集中每种攻击的不同子类的细分}
-  \label{tab:UNSW-NB15_class}
-  \begin{tabularx}{\textwidth}{@{}ccX@{}}
-  \toprule
-    \multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{子类}}\\
-  \midrule
-    Fuzzers & 10 & FTP, HTTP, RIP, SMB, Syslog, PPTP, TFTP, DCERPC, OSPF, BGP\\
-    Probe & 13 & Telnet, SNMP, SunRPC Portmapper (TCP) UDP Service, SunRPC Portmapper (TCP) TCP Service, SunRPC Portmapper (UDP) UDP Service, NetBIOS, DNS, HTTP,
-    SunRPC Portmapper (UDP), ICMP, SCTP, MSSQL, SMTP\\
-    Shellcode & 15 & FreeBSD, HP-UX, NetBSD, AIX, SCO Unix, Linux, Decoders, IRIX, OpenBSD, Mac OS X, BSD, Windows, BSDi, Multiple OS, Solaris\\
-    Analysis & 3 & HTML, Port Scanner, Spam\\
-    Backdoors & 1 & Backdoors\\
-    DoS & 36 & Ethernet, SunRPC, LDAP, Browser, DCERPC, Telnet, NetBIOS/SMB, DNS, TCP, Common Unix Print System (CUPS), Miscellaneous, ISAKMP, Hypervisor, 
-    Cisco Skinny, IIS Web Server, IGMP, ICMP, XINETD, SIP, RTSP, Windows Explorer, IRC, NTP, CUPS, Asterisk, HTTP, Microsoft Office, SSL, IMAP, SMTP, Oracle, RDP, VNC, FTP, TFTP, SNMP\\
-    Exploits & 54 &Clientside Microsoft Paint, Dameware, Clientside Microsoft Media Player, SSH, SCCP, Unix r Service, SunRPC, LDAP, Web Application, Browser, DCERPC, Interbase, Telnet, DNS, TCP, Webserver, SCADA, SMB, Miscellaneous, Cisco IOS, All, LPD, RADIUS, RDesktop, Unix 'r' Service, IGMP, POP3, ICMP, Clientside Microsoft, Microsoft IIS, Backup Appliance, IDS, Apache, NNTP, RTSP, Evasions, SIP, WINS, Office Document, PHP, Clientside Microsoft Office, Miscellaneous Batch, Browser FTP, MSSQL, SOCKS, PPTP, Clientside, SSL, IMAP, SMTP, Oracle, VNC, FTP, TFTP\\
-    Generic& 7 &All,SIP,HTTP,SMTP,IXIA,TFTP,Superflow\\
-    Reconnaissance& 14 &DNS, HTTP, ICMP, MSSQL, NetBIOS, SCTP, SMTP, SNMP, SunRPC, SunRPC Portmapper (TCP) TCP Service, SunRPC Portmapper (TCP) UDP Service, SunRPC Portmapper (UDP) TCP Service, SunRPC Portmapper (UDP) UDP Service, Telnet\\
-    Worms&1&Worms\\
-    \bottomrule
-  \end{tabularx}
-\end{table}
-
-
-
-\section{数据预处理}
-数据预处理是深度学习或机器学习一个至关重要的步骤，
-进行数据预处理的目的是制作出一个干净、标准化、均衡的数据集，为特征学习和后续的模型训练打下坚实的基础。
-正确的数据预处理策略可以显著提高模型的性能，加快训练速度，并提高模型在未见数据上的泛化能力。
-本文在数据预处理阶段采取了综合性的方法论，旨在优化模型的学习效率和性能。\par
-
-首先，对训练集和测试集执行特征编码，以便将分类数据转换为模型可处理的格式。
-随后，本研究针对原始数据集及特征编码过程中可能产生的缺失值进行了细致的处理，确保数据的完整性。
-在完成上述步骤后，进一步通过特征选择技术降低数据维度，这一步骤旨在剔除冗余或不相关的特征，从而提高模型训练的效率并可能提升模型的泛化能力。
-此外，对特征选择后的数据进行标准化处理，确保所有特征都在相同的尺度上，进一步促进模型学习。
-鉴于本文采用增量学习策略以及数据集呈现显著的不平衡性，本文将会对数据集进行分层抽样优化，以期在训练过程中实现更为均衡的类别表示和提升模型对少数类的识别能力。\par
-
-图~\ref{fig:dataprocess}~概括性地展示了整个数据预处理和模型训练的流程。
-本节接下来的部分将对这一流程中的关键步骤进行详细阐述，以便于读者深入理解本研究采取的方法论及其背后的逻辑。
-\begin{figure}[htbp]
+\begin{figure}[h]
   \centering
-  \includegraphics[width = 0.8\textwidth]{dataprocess.drawio.png}
-  \caption{数据集预处理流程图}
-  \label{fig:dataprocess}
-\end{figure}
+  \includegraphics[width = 0.8\textwidth]{markinfo.drawio.png}
+  \caption{本文所设计的用于在数据包中记录标记信息的结构体}
+  \label{fig:data_structure}
+\end{figure} 
 
-\subsection{特征编码}
-\begin{table}[htbp]
-  \caption{One-hot编码算法实现}
-  \label{tab:onehot}
+该结构体共由三类字段组成。
+首先，是允许标志位（allow\_mark），长度为1 bit。
+这一字段的作用是控制后续路由器能否对数据包进行概率标记。
+若值为0，则所有路由器均不对该数据包进行标记；若值为1，则后续的组首路由器则会按照预设的概率执行标记操作。
+这一设计确保了路径上标记信息的连续性，对于间断式的标记信息，路径重构算法无法有效复原。\par
+
+第二类字段是接口号标记字段（interface\_i），其中i取值范围为[1,m]，字段长度为b bit，共可表示$2^b$个接口号。
+根据具体的网络环境和溯源需求，b和m的值可灵活调整。
+
+这m个接口号标记字段（interface\_i）在路径重构过程中扮演着核心角色。
+每个字段分别记录着数据包在网络传输过程中到达路由器时所经过的输入接口号。
+% 具体来说，当数据包在网络中传输时，它会依次经过多个路由器。     
+% 在每个路由器上，数据包通过特定的接口进入路由器。
+% 这m个接口号标记字段就是用来记录这些接口号的，它们按照数据包经过路由器的顺序进行排列，形成了一组有序的数据。
+
+在本文中，我们将路由器接收到数据包的输入接口号简称为“接口号”，以简化描述并提升表述的清晰度。
+\par
+% 组的概念是相对于路由器和数据包的，数据包具体要经过的完整路径上的连续m个路由器构成一“组”。
+
+
+第三类字段则是异或标志位，这类字段共有两个：xor\_1和xor\_2,每个字段与单个接口号标记字段的长度相同。
+xor\_1记录的是所有对其标记的路由器的来源接口号异或值；
+xor\_2则记录数据包从发送者到接收者整条路径上所有路由器来源接口号的异或值，无论是否进行标记。
+这两个字段——xor\_2与xor\_1，在后续的路径重构算法中发挥着不可或缺的作用。
+xor\_2结合TTL（生存时间）能够有效区分不同的网络传输路径，而xor\_1则可作为一条关键线索，引导路径重构算法的完成。
+具体的重构过程将在后续章节中详细阐述。\par
+
+总的标记空间大小为 $l = 1 + (m + 2) \times b$ bit，用于支持数据包标记过程。
+在实际应用中，我们可根据具体场景设定b和m的值。
+例如，在本文的实验中，考虑到大多数互联网路由器接口数远少于$2^6 =64$个，我们设定b = 6。
+同时，我们设定了 m 分别为 2 和 4，总共使用了 IP 头部中的 25 和 37 bit，对应标记空间的利用率分别为 0.08 和 0.0108。
+相较于传统使用 IP 地址作为标记信息的策略（利用率为$1/32 \approx 0.0313$），利用率有了显著提高。
+通过这样的结构体，我们能更好的存储数据包在路径传输过程中的收集到的标记信息，方便路径重构算法快速且准确地完成路径重构。\par
+% 标记空间具体来自于数据包头部字段，在实际应用时可以依照图2中的IP头部字段来构建此标记空间。
+% 在本方案中，我们利用数据包头部中的 b bit来标记数据包经过的路由器来源接口号。
+% 每个数据包携带了 m 个接口号标记字段以及两个 XOR (异或)字段，每个 XOR 字段也占据 b bit。
+% 最后，还有一个 1 位的允许标志位。总的标记空间大小为 $l = 1 + (m + 2) \times b$ bit，用于支持数据包标记过程。
+
+
+
+% 插入外部代码
+% \lstinputlisting[firstline=8,style=lstStyleLaTeX]{main.tex}
+
+
+\section{路由器标记阶段}
+\textbf{1. “组”的定义}\par
+路由器的数据包标记过程是以“组”为单位进行的。
+因此，在本文中，我们将数据包从发送者到接收者所经过的整条路径上每连续的m个路由器划分并定义为一个“组”。
+其中，距离发送者最近的“组”被定义为“首组”，而距离接收者最近的“组”则为“最后一组”。
+值得注意的是，“最后一组”的路由器数量可能少于m个。
+假设从发送者到接收者之间共有d跳路由器，那么这d跳路由器可以被划分为k“组”，其中$k=\lceil d/m \rceil$，即向上取整得到组数。
+这样的分组方式有助于我们更有效地进行数据包标记和路径重构。\par
+
+\textbf{2.标记概率的确定}\par
+当路由器以组为单位对数据包进行概率标记时，第一组的标记概率为1，即直接进行标记，而其余组则以$p \times allow\_mark$概率进行标记（这里，我们假设p为0到1之间的一个小数）。
+另外，需要注意的是，具体的概率判定组是否标记是由组首路由器完成的。
+\par
+
+\textbf{3.具体的标记操作}\par
+图~\ref{fig:marking_procedure}~是标记操作的详细流程图。
+\begin{figure}[h]
   \centering
-  \begin{tabularx}{1.0\textwidth}{cl}
-  \toprule
-  \multicolumn{2}{l}{\textbf{one-hot编码算法}}\\
-  \midrule
-  \multicolumn{2}{l}{\textbf{输入}: 数据集 $D$，其中包含数值型和分类型列} \\ 
-  \multicolumn{2}{l}{\textbf{输出}: 经过One-hot编码的数据集 $D'$} \\
-  1& 初始化一个空的数据集 $D'$ \\
-  2& \textbf{for} 每一列 $col$ \textbf{in} $D$: \\
-  3&\quad \textbf{if} $col$ 是分类型: \\
-  4&\quad\quad $unique\_values$ = 获取 $col$ 的所有唯一值 \\
-  5&\quad\quad \textbf{for} 每一个值 $val$ \textbf{in} $unique\_values$: \\
-  6&\quad\quad\quad 创建一个新列 $new\_col$，名称为 ``$col\_val$''\\
-  7&\quad\quad\quad \textbf{for} 每一行 $row$ \textbf{in} $D$: \\
-  8&\quad\quad\quad\quad \textbf{if} $row[col] == val$: \\
-  9&\quad\quad\quad\quad\quad 在 $D'[new\_col]$ 中填充 1 \\
-  10&\quad\quad\quad\quad \textbf{else}: \\
-  11&\quad\quad\quad\quad\quad 在 $D'[new\_col]$ 中填充 0 \\
-  12&\quad \textbf{else}: \\
-  13&\quad\quad 将 $col$ 直接复制到 $D'$ 中 \\
-  14&\textbf{return} $D'$ \\ 
-  \bottomrule
-  \end{tabularx}
-  \end{table}
-特征编码是一种数据预处理方法，用于将原始数据转换为机器学习算法能够理解和处理的格式。
-这个过程对于提高模型的性能和准确性至关重要，因为大多数机器学习算法预期输入数据为数值型，而原始数据往往包括各种类型，如文本、日期或分类数据。
-特征编码操作的目的便是将非数值特征转换为数值形式，使算法能够对这些数据进行计算。
-因为我们的流量数据集中也存在着许多非数值类型的特征（例如：IP地址、协议类型等），所以我们这里也需要对数据集进行特征编码，将非数值类型转为数值类型。\par
-
-
-One-Hot 编码是一种特殊且广泛使用的特征编码方法，它易于理解和实现，非常适用于处理具有有限类别的分类数据。
-因此本文将选用one-hot编码方法对数据集中的非数值类型进行特征编码。
-这种编码方法通过为每个类别创建一个新的二进制列来工作。
-对于每个数据点，它所属的类别的列被标记为1，而所有其他列被标记为0。
-表~\ref{tab:onehot}~是本文采用one-hot编码对数据集进行特征编码的具体算法。\par
-
-
-在处理IP地址时，直接进行One-Hot编码会破坏其内在特征并导致维度爆炸，影响模型性能。
-常见的处理方法包括字段分割、整数转换、地理定位和嵌入法。字段分割法将IPv4地址拆分为四个数值特征，保留模式识别能力。
-整数转换法将IP转为32位整数（IPv6为更大整数），保持层次结构，适合数值特征处理。
-地理定位将IP映射到地理特征，如国家、城市，利用外部服务获取，适用于地域分析。
-嵌入法通过深度学习将IP转换为向量，捕获地址间相似性，但计算成本高。
-考虑到整数法可能引起特征不平衡，地理定位操作复杂，嵌入法计算代价大，本文采用字段分割法简化处理流程。
-
-\subsection{数据集平衡处理}
-在大规模数据集预处理中，解决数据不平衡问题是提高模型性能和泛化能力的关键步骤。
-通过图~\ref{fig:kddtraindistribution}、\ref{fig:kddtestdistribution}和\ref{fig:UNSW-NB15barchart}~明显可以看出，本文采用的数据集是非常不均衡的，因此本文将会对数据集进行平衡处理。
-数据不平衡通常通过欠采样和过采样两种重采样策略来处理。
-欠采样通过减少多数类样本来达到平衡，尽管可能丢失一些信息，但有助于增强模型对少数类的关注。
-相反，过采样则通过增加少数类样本数量来平衡数据，例如可以采用复制样本或利用SMOTE等高级技术生成新样本，提高少数类的代表性。
-在样本量不足时，过采样尤为适用，鉴于此，本文将会利用SMOTE算法对数据集进行平衡处理。\par
-
-
-SMOTE（Synthetic Minority Over-sampling Technique，合成少数类过采样技术）是一种被广泛采用的过采样策略，旨在通过合成新的少数类样本而非简单重复现有样本来增强数据集的类别平衡。
-此技术显著提升了分类器对少数类的识别能力，进而改善了模型的整体性能及其泛化能力。
-SMOTE算法的核心优势在于其能够通过引入合成样本增加数据集的多样性，促进模型学习更复杂的决策边界\cite{chawla2002smote}\cite{fernandez2018smote}。
-表~\ref{tab:smote}~是该技术的算法实现。
-\begin{table}[htbp]
-  \caption{SMOTE算法实现}
-  \label{tab:smote}
-  \centering
-  \begin{tabularx}{1.0\textwidth}{cl}
-  \toprule
-  \multicolumn{2}{l}{\textbf{SMOTE算法}}\\
-  \midrule
-  \multicolumn{2}{l}{\textbf{输入}: 少数类样本集 $S$，采样倍率 $N$，最近邻数 $k$} \\ 
-  \multicolumn{2}{l}{\textbf{输出}: 合成样本集 $S'$} \\
-  1& 如果 $N$ 不是整数，则将 $N$ 向下取整，同时调整最终的样本数量 \\
-  2& 初始化空的合成样本集 $S'$ \\
-  3& \textbf{for} 每一个样本 $s$ \textbf{in} $S$: \\
-  4&\quad 找到 $s$ 的 $k$ 个最近邻 \\
-  5&\quad \textbf{for} $i$ \textbf{from} 1 \textbf{to} $N$: \\
-  6&\quad\quad 随机选择一个最近邻 $nn$ \\
-  7&\quad\quad \textbf{for} 每个特征 $f$: \\
-  8&\quad\quad\quad 计算 $s$ 和 $nn$ 在特征 $f$ 上的差值 $\Delta f$ \\
-  9&\quad\quad\quad 生成新值 $new\_f = s[f] + \Delta f \times \text{随机数}(0, 1)$ \\
-  10&\quad\quad 创建新样本 $new\_s$，其特征值为所有生成的 $new\_f$ \\
-  11&\quad\quad 将 $new\_s$ 添加到合成样本集 $S'$ \\
-  12&\textbf{return} $S'$ \\ 
-  \bottomrule
-  \end{tabularx}
-\end{table}
-
-% 对于表~\ref{tab:smote}~中算法的最佳采样倍率，通常不能直观的获取到。
-% 为了取得最优的抽样比率，本文将会利用遗传算法对采样倍率进行优化。
-% 为了进一步提升模型在处理类别不平衡数据集时的性能，本研究引入了一种基于遗传算法的SMOTE优化技术。
-% 该技术旨在调整采样比率，以寻找合成样本中类别占比的一个理想平衡点，这个平衡点能够在增强模型对少数类识别能力的同时，避免过拟合和信息冗余的问题。
-% 以下是该方法的详细介绍。\par
-
-
-\section{特征学习阶段}
-网络通信涉及复杂的交互模式，包括客户端与服务器之间的请求响应、数据传输过程中的拥塞控制等。
-这些交互在空间上表现为数据包的结构和内容，如源IP地址、目标IP地址、端口号、协议类型等，这些信息在数据包的特定位置以特定格式存在，形成了数据的“空间”结构。
-在时间上则表现为交互的顺序和持续时间。\par
-
-本文所使用的模型结构融合了残差神经网络和双向门控循环单元，旨在综合利用样本的局部空间特征和时序特征，提升模型的决策性能。
-残差网络通过深层的神经网络架构有效提取复杂的空间特征，而BiGRU则捕捉时间序列数据中的前后时序依赖，通过这种结构的设计以使模型能够更准确地处理流量数据集种的时空特性。
-\subsection{多模态特征融合设计}
-多模态特征融合是一种将来自不同来源或类型（模态）的数据集成在一起的过程，目的是改善决策过程、预测准确性或数据解释能力。
-这些不同模态的数据可能包括文本、图像、视频、音频和传感器数据等。
-在机器学习和深度学习领域，多模态特征融合已成为一个重要的研究领域，尤其是在需要综合处理不同类型数据的应用中，如自然语言处理、计算机视觉、语音识别和人机交互等。
-融合策略通常可以分为早期融合、晚期融合、混合融合三种类型。\par
-
-早期融合(如图~\ref{fig:MultimodalFusio} (a)~所示)，也称为特征级融合，这种策略在模型的某个中间层面整合不同模态的特征。
-早期融合旨在利用深度学习模型的能力来学习和利用不同模态之间的相互作用。\par
-
-在晚期融合(如图~\ref{fig:MultimodalFusio} (b)~所示)策略中，每个模态分别处理并做出决策或预测，最终的融合是在决策或预测级别进行的，例如通过投票、平均或学习到的加权组合。
-晚期融合能够保持模态之间的独立性，适用于模态之间关联不强的情况。\par
-
-混合融合(如图~\ref{fig:MultimodalFusio} (c)~所示)策略结合了上述几种融合策略的元素，以期在不同模态的特征提取和决策过程中利用各种融合方法的优点。
-例如，一个混合融合框架可能会同时使用早期融合来捕获一些模态之间的直接关系，以及晚期融合来维持某些模态的独立性。
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width = \textwidth]{MultimodalFusion.drawio.png}
-  \caption{3种多模态特征融合方法\cite{hejunandzhangcaiqing}}
-  \label{fig:MultimodalFusio}
-\end{figure}
-
-早期融合的效果很大程度上依赖于对模态特性的理解和模型结构的设计，可能不适用于所有类型的多模态数据。
-由于每个模态独立处理，晚期融合可能无法捕获模态之间的深层次相互作用。
-而且晚期融合通常在决策层面进行，限制了对不同模态特征之间更细粒度关系的探索。
-而混合融合能够通过结合早期、晚期和中间融合的优点，提供了更大的灵活性来设计模型。
-这使得混合融合能够更好地适应不同模态之间的复杂关系和动态变化。
-通过在不同的层级和阶段整合信息，混合融合能够最大化地利用不同模态之间的信息，包括直接的特征信息和深层次的相互作用信息。\par
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width = 0.8\textwidth]{ResNet-BiGRU-Fusion.drawio.png}
-  \caption{ResNet-BiGRU特征融合设计}
-  \label{fig:ResNet-BiGRU-Fusion}
-\end{figure}
-
-本文将利用混合融合的方法来融合ResNet-BiGRU模型。
-首先本文分别利用ResNet从网络流量数据集中提取的空间特征以及BiGRU提取时序特征，再将两个特征融合。为了简化计算量，我们使用联合架构进行融合。
-联合架构有两种方法，一种是"加"联合方法。一种是"乘"联合方法。
-"加"联合方法，或简称加法融合，通常指的是将不同模态的特征向量进行加权和或简单的相加操作。
-这种方法假设不同模态的特征贡献可以直接相加，以形成一个综合的特征表示。
-加法融合可以表示为：
+  \includegraphics[width = 0.8\textwidth]{marking_procedure.png}
+  \caption{路由器标记操作流程图}
+  \label{fig:marking_procedure}
+\end{figure}  
+在进行具体的标记操作时，组首路由器会根据先前确定的概率来决定是否对数据包进行标记。\par
+若组首路由器决定进行标记，它首先会清空MarkInfo中的所有接口号标记字段（即interface\_i，其中i取值范围为[0,m-1]）。
+随后，组内的所有路由器将与组首路由器执行相同的操作，检查是否存在空的接口号标记字段。
+若存在空字段，则直接将对应的来源接口号填充进去。
+同时，计算xor\_1（如公式\ref{eq:xor1}所示）和xor\_2（如公式\ref{eq:xor2}所示）的值，并将它们分别写入相应的异或字段。\par
 \begin{equation}
-  z = f(w_1^Tv_1 + w_2^Tv_2+ \dots + w_n^Tv_n)
+  \label{eq:xor1}
+   xor\_1 = xor\_1 \oplus source\_interface
 \end{equation}
-\begin{flushleft}
-  \renewcommand\arraystretch{1.25}
-  \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
-  式中& $\symbf{z}$ &共享语义子空间的输出结果；\\
-  &  $\symbf{N}$&类别总数；\\
-  &  $\symbf{v}$ &各模态的输入；\\
-  &  $\symbf{w}$ & 权重，下标表示不同的模态，通过映射$f$将所有子模态语义转换到共享子空间。\\
-  \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
-  \end{flushleft}
-
-
-  "乘"联合方法，或乘法融合，涉及到对不同模态的特征进行乘积操作。
-  这种方法基于这样的假设：一个模态的特征可以通过与另一模态的特征进行乘积来增强或抑制重要的信号。
-  乘法联合可以用以下公式表示：
 \begin{equation}
-  z = \begin{bmatrix}v^1 \\1\\\end{bmatrix} \otimes \begin{bmatrix}v^2 \\1\\\end{bmatrix} \otimes \dots \otimes \begin{bmatrix}v^n \\1\\\end{bmatrix}
-\end{equation}  
-\begin{flushleft}
-  \renewcommand\arraystretch{1.25}
-  \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
-  式中& $\symbf{z}$ &融合张量后的结果输出；\\
-  &  $\symbf{v}$&不同的模态；\\
-  &  $\symbf{\otimes}$ &外积算子。\\
-   \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
-\end{flushleft}
+  \label{eq:xor2}
+   xor\_2 = xor\_2 \oplus source\_interface
+\end{equation}
+如果不存在空的接口号标记字段，表明本组均不对此数据包进行标记，接收到该数据包的路由器也将不会对其进行标记。
+在这种情况下，路由器仅计算xor\_2的值，并将其写入xor\_2字段中。\par
+% xor\_2字段扮演着记录数据包传输路径中所有路由器来源接口号异或值的角色。
+% 不论数据包是否在某些路由器处被标记，xor\_2字段都会被更新。
+% 这意味着，从发送者到接收者，每经过一个路由器，该路由器都会根据自身的来源接口号计算xor\_2的值，并将这个值写入数据包的xor\_2字段中。
+% 这种设计确保了xor\_2字段能够完整反映数据包在网络中的传输路径，为后续的路径重构提供了关键信息。\par
+
+另一方面，如果组首路由器基于概率判断决定不对数据包进行标记，它会将allow\_mark字段的值设置为0。
+这一操作是为了通知后续的组，不再对该数据包进行概率性的标记操作。
 
 
+通过这些操作，当数据包顺利抵达接收者时，其MarkInfo中的interface字段已经记录了一组路由器的接口号。
+同时，MarkInfo中的xor\_1字段的值将等于所有对数据包进行标记的路由器接口号的异或，而xor\_2字段的值则等于路径上所有路由器的接口号异或。
+当接收者接收到一定数量的标记数据包后便可以提取这些信息执行路径重构算法完成路径重构。
+% 在本文的数据包标记法部分，算法~\ref{alg:packet_marking}~提供了详细
+% 的内容，用于中间路由器对数据包进行标记，同时，图
+% ~\ref*{fig:marking_procedure}~抽象地描述了这一过程。这一过程包括以
+% 下关键步骤：
 
-尽管“加”联合方法简单且容易实现，但其特征向量语义组合容易造成后期语义丢失，使模型性能降低，而“乘”联合方法弥补了这一不足，通过张量计
-算使特征语义得到充分融合\cite{hejunandzhangcaiqing}。因此本文会用“乘”的方式来进行融合。
-最终本文所采用的融合架构如~~\ref{fig:ResNet-BiGRU-Fusion}~所示。
+% \input{pseudocode/marking.tex}
 
-\subsection{模型网络结构设计}
-混合模型主要由一个残差网络模型以及双向门控循环单元网络融合而成。
-其中，残差模型主要包括两种类型的残差块：conv\_block（卷积残差块）和identity\_block（恒等残差块）。
-这两种块的设计理念是为了解决深度网络中的梯度消失问题，从而使网络能够在增加深度的同时保持训练的有效性和稳定性。
-conv\_block负责调整输入特征图的维度，以匹配块输出时的维度变化。
-它通过在残差路径中引入具有步长的卷积操作来实现降维，并通过额外的卷积层来调整通道数，从而使得主路径上的特征图尺寸与残差路径上的输出能够相匹配。
-这种设计使得网络能够在增加深度的同时，适应更高层的特征表示。
-identity\_block则在不需要改变输入特征图维度时使用，主要用于网络的深层部分，用以加深网络深度提高模型的性能。\par
+% \begin{enumerate}[label=(\alph*).]
+%   \item \emph{计算路由器位序：}首先，算法需要确定当前路由器是数据包
+%   所经过路径中的第几个路由器，即当前路由器在数据包需要经过的所有路由
+%   器的位序。数据包的TTL字段的初始值通常因发送方的系统而异，但通常位于
+%   范围{32，64，128，255}内。为实现这一步骤，算法首先读取数据包中的
+%   TTL字段，然后从这组初始值中找到能够不小于数据包TTL的值。然后，计算
+%   这个最小初始值与数据包中的TTL字段之间的差值，这个差值表示了数据包从
+%   发送者发送后到达当前路由器时所经过的路由器跳数，即当前路由器在整个
+%   路径中的位序。
+%   \item \emph{计算组中序号：}接下来，算法将使用此位序和预定义的组大
+%   小参数 m（在伪代码中为\emph{group\_size}变量）进行取模运算，得到
+%   模数。本方案利用路由器在数据包从发送者到受害者的整条路径上的顺序，
+%   对路由器进行分组。因此，所得的模数表示路由器在组中的序号，范围从0到
+%   m-1。
+%   \item \emph{区分路由器类型：}根据功能性需求，路由器可以分为两类：
+%   组中的0号路由器和非0号路由器。
+%   \begin{enumerate}
+%     \item[i.] 对于组中的0号路由器，还需要确定是否是路径中首个路由器。
+%     如果是首个路由器，便以1概率执行标记操作：将数据包的接口标记字段
+%     \emph{interface\_0}到\emph{interface\_(m-1)}全部设置为空，即
+%     未标记状态；将数据包在此路由器中的来源接口号写入到相应的接口标记字
+%     段；取出XOR1字段中的值与来源接口号进行异或操作，并将结果重新写入到
+%     XOR1字段；将数据包中的允许标记字段设置为True。如果路由器非首组的0
+%     号路由器，那么它会根据允许标记字段来决定是否以p概率执行标记操作。若
+%     标记，操作与前述标记操作相同；若不标记，该路由器会将允许标记字段设置
+%     为False。这确保了数据包只有经过本组路由器标记后，后面的其它组才有可
+%     能进行标记。
+%     \item[ii.] 对于组中非0号路由器，只要数据包中对应的标记字段为空，
+%     便会对其进行标记：将来源接口号写入到数据包相应的接口标记字段；取
+%     出XOR1字段中的值与来源接口号进行异或操作，并将结果写入到XOR1字段。
+%   \end{enumerate}
+%   \item \emph{更新数据包信息：}最后的步骤适用于所有中间路由器，无论
+%   是否为组中的0号路由器。具体为将来源接口号与XOR2字段值进行异或运算，
+%   并将结果重新写入到XOR2字段。这样，XOR2字段结合TTL字段便可作为每条
+%   路径的地址。在路径重构过程中，以此即可实现对数据包按路径进行分类。
+% \end{enumerate}
 
-残差模型以15x15\footnote{经过特征编码阶段后，数据的维度变为了(214,1),为了能够进行2D卷积操作，本文将数据的形状调整为(15,15,1),并进行了零填充。}的二维输入数据开始，紧接着是一个初始卷积层，该层使用64个3x3大小的滤波器，并应用’same’填充，以保持输出特征图的尺寸。
-此外，这一层使用L2正则化以防止过拟合，并通过批归一化（BatchNormalization）和ReLU激活函数对特征进行标准化和非线性化处理。
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width = 0.8\textwidth]{marking_procedure.png}
+%   \caption{算法~\ref{alg:packet_marking}~流程图}
+%   \label{fig:marking_procedure}
+% \end{figure} 
+\section{标记数据包收集阶段}
+\subsection{收集时间}
+在正常情况下，当服务器未检测到攻击时，系统不会主动进行标记数据包的收集工作，以确保服务器的正常运行和性能不受影响。
+然而，一旦服务器检测到遭受攻击的迹象，便会立即启动标记数据包的收集机制。
 
-接下来，模型通过两个阶段的残差块处理特征：
+\subsection{收集步骤}
+标记数据包收集系统的处理步骤如下：
 
-\begin{itemize}
-  \item 第一阶段包括一个卷积残差块（conv\_block），用于调整特征图的尺寸和深度，以及一个恒等残差块（identity\_block），以在不改变特征图维度的情况下加深模型。
-  \item 第二阶段同样起始于一个卷积残差块，用于进一步特征调整，然后是两个恒等残差块，用于增强模型的特征提取能力。
-\end{itemize}
-
-每个卷积残差块中的卷积层均配备L2正则化，并且所有残差块后都紧随批归一化和ReLU激活。
-此设计旨在通过残差连接促进更深层网络的有效训练，避免梯度消失或爆炸问题。
-在经过残差块系列处理后，模型使用平均池化层（AveragePooling2D）来减小特征图的尺寸，随后是一个Dropout层，以0.5的比率随机断开输入单元，减少过拟合风险。
-最后，模型展平处理后的特征，为后续与双向门控循环单元（BiGRU）的特征融合做准备。值得注意的是，该结构在最终未直接加入全连接层，是因为设计上考虑将残差网络的空间特征与BiGRU的时序特征进行混合融合，
-
-
-\begin{table}[htbp]
-  \label{tab:resnet_description}
-  \caption{The architecture of our simplified ResNet model}
+\textbf{1. 初始化路径信息数组}\par
+收集系统首先会初始化一个本文设计的如图~\ref{fig:markinfo_list}~所示的路径信息数组（PathInfos），用于管理不同待重构的路径信息。
+\begin{figure}[h]
   \centering
-  \begin{tabular}{c|c|c}
-    \hline
-  Layer name & Output size & ResNet-BiGRU \\
-  \hline
-  conv1 & $15 \times 15$ & $3\times3$, 64, stride 1 \\
-  \hline
-  % 使用multirow和mbox命令来确保矩阵居中
-  \multirow{4}{*}{conv2\_x} & \multirow{4}{*}{\centering $8 \times 8$} &
-  \multirow{4}{*}{$\left[\begin{array}{c}
-      1 \times 1, 64 \\
-      3 \times 3, 64 \\
-      1 \times 1, 256 
-  \end{array}\right] \times 2$ , stride 2} \\
-  &&\\
-  &&\\
-  &&\\
-  \hline
-  \multirow{4}{*}{conv3\_x} & \multirow{4}{*}{\centering $8 \times 8$} &
-  \multirow{4}{*}{$\left[\begin{array}{c}
-    1 \times 1, 64 \\
-    3 \times 3, 64 \\
-    1 \times 1, 256 
-  \end{array}\right] \times 2$, stride 1} \\
-  &&\\
-  &&\\
-  &&\\
-  \hline
-  avg\_pool & $1 \times 1$ & AvgPool $2 \times 2$ \\
-  \hline
-  flatten &1,1264&  \\
-  \hline
-  dropout & & Dropout(0.5) \\
-  \hline
-  \end{tabular}
-\end{table}
+  \includegraphics[width = 0.8\textwidth]{mark_list_structure.drawio.png}
+  \caption{本文设计的用于管理路径重构信息的数组}
+  \label{fig:markinfo_list}
+\end{figure} 
+该数组包含路径ID（Pid）、路径长度（PLen）以及指向存放标记信息（MarkInfo）数组的指针。
+这样的设计使得系统能够高效地存储和检索路径信息。\par
+
+\textbf{2. 提取攻击数据包}\par
+系统从网络流量中筛选出与攻击相关的数据包。
+这些数据包通常包含特定的攻击特征或标记，以便系统能够准确识别并提取。\par
+
+\textbf{3. 生成路径编码并查找路径}\par
+收集系统将攻击数据包中的TTL字段和MarkInfo中的xor\_2字段拼接生成路径编码。
+TTL字段指示数据包在网络中的生存时间，而xor\_2字段记录数据包经过的所有路由器来源接口号的异或值。
+利用这两个字段的组合，系统能够为每条传输路径生成唯一的编码。
+随后，系统利用这个路径编码在PathInfos中查找是否存在相应的路径信息。
+如果找到匹配项，则进入步骤5；否则，进入步骤4。\par
+
+\textbf{4. 初始化新路径信息}\par
+当PathInfos中不存在与当前路径编码匹配的信息时，系统执行以下操作：
+\begin{enumerate}[label=\roman*.]
+  \item 计算路径长度；
+  \item 将路径长度和路径编码添加到PathInfos中相应元素的字段中；
+  \item 分配内存空间用于存放新路径的标记信息数组，并更新PathInfos中对应元素的指针,使其指向该数组；
+  \item 启动一个针对新路径的重组程序，并建立与该路径的发布者订阅者关系。
+\end{enumerate}
+\par
+
+\textbf{5. 写入标记信息并通知重组程序}\par
+执行完步骤4后，PathInfos中已经存在与当前路径编码匹配的信息，此时执行以下操作：
+\begin{enumerate}[label=\roman*.]
+  \item 从当前操作的攻击数据包中提取MarkInfo；
+  \item 将提取的MarkInfo追加到对应路径的标记信息数组中；
+  \item 通知在该路径上进行订阅的重组程序进行处理。
+\end{enumerate}
+\par
+\textbf{6. 重复执行直至停止溯源}\par
+从第2步到第5步的操作将重复执行，直到系统接收到停止溯源的指令或网络流量中不再出现与攻击相关的数据包为止。\par
+
+通过这些操作的循环执行，收集系统能够实现对网络流量的持续监控，确保及时捕获与攻击相关的数据包。
+同时，系统也能够及时通知路径重构程序进行实时溯源，从而高效处理海量网络数据。
+% \subsection{收集步骤}
+% 标记数据包收集系统的工作流程如下：\par
+% \textbf{1.初始化路径信息数组：PathInfos}
+% 收集系统首先会初始化如图~\ref{fig:markinfo_list}~所示的数组(PathInfoList)对不同待重构的路径进行管理。
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width = 0.8\textwidth]{mark_list_structure.drawio.png}
+%   \caption{本文设计的用于管理路径重构信息的数组}
+%   \label{fig:markinfo_list}
+% \end{figure} 
+% 数组中共有三个字段，第一个字段(Pid)是路径的ID，即路径的唯一标志值，第二个字段(PLen)是该路径的长度，第三个字段是一个结构体数组的指针，该指向存放MarkInfo的数组。
 
 
-对于BiGRU模型，模型的第一层拥有64个单元并保留序列中每个时间步的输出。
-紧接着是一个10\%的dropout层，用于减少过拟合通过随机丢弃一部分的特征连接。
-之后，数据流经第二个BiGRU层，这次是32个单元，不过这一层不保留序列中每个时间步的输出，只输出最后的结果。
-随后是另一个10\%的dropout层。
-值得注意的是，为了将BiGRU层的特征输出与ResNet模型的特征进行合并，在这个结构中也同样并没有加入全连接层（Dense layer）作为输出。\par
+% \textbf{2.攻击数据包提取：}
+% 初始化完PathInfoList后系统首先会从网络流量中筛选出一个与攻击相关的数据包。
+% 这种数据包通常包含特定的攻击特征或标记，以便系统能够准确识别并提取。\par
 
 
-最后，从ResNet模型以及BiGRU模型中分别提取决策输出，并通过Dense层进行处理，使得每个模型的输出都通过一个softmax激活函数转换成类别决策。
-此外，代码中引入了一个特殊的特征处理步骤，将ResNet模型的输出从11264维映射到64维，以便与BiGRU模型的输出进行元素乘法操作，合并来自两种不同模型的信息。
-随后，将ResNet和BiGRU的决策输出与经过特征乘操作的结果合并成一个统一的张量，再通过一个额外的Dense层，这一层输出最终的分类决策。
+% \textbf{3.路径查找：}
+% 收集系统将攻击数据包中的TTL（Time-To-Live）字段值以及MarkInfo中的xor\_2字段的值进行拼接。
+% xor\_2字段记录了数据包经过的所有路由器来源接口号的异或值，而TTL字段则指示了数据包在网络中的生存时间。
+% 通过这两个字段的组合，系统能够为每条传输路径生成一个独特的编码作为路径编码。\par
+% 然后收集系统利用这个路径编码去PathInfoList种查找，看看数组中是否已经存在这样的路径信息。
+% 如果存在转到转到步骤5，如果不存在，转到步骤4。
 
-图~\ref{fig:hyber_model_struct}~是这个混合模型的整体架构，表~\ref{tab:model_params}~是混合模型的参数数量，以便于理解本文模型的架构。
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width = \textwidth]{hyber_model_struction.drawio.png}
-  \caption{混合模型整体结构}
-  \label{fig:hyber_model_struct}
-\end{figure}
+% \textbf{4.初始化标记信息数组：}
+% 收集系统首先会计算路径长度。
+% 并将路径长度和路径编码分别追加到数组中的元素内。
+% 之后收集系统开辟一个存放标记信息的数组，并使元素的指针指向该数组。
+% 最后系统会开启一个专门针对此路径进行重组的程序，该程序和此路径建立发布者订阅者关系。\par
 
+% \textbf{5.标记信息写入：}
+% 收集系统将当前操作的攻击数据包中的MarkInfo提取并追加到相应的标记信息数组中。
+% 并通知在该路径上进行订阅的路径重组程序进行处理。\par
+% \subsection{收集时间}
+% 在正常情况下，当服务器未检测到遭受攻击时，系统不会主动进行标记数据包的收集工作，以确保服务器的正常运行和性能不受影响。
+% 然而，一旦服务器检测到遭受攻击的迹象，便会立即启动标记数据包的收集机制。
 
+% \subsection{收集步骤}
+% 标记数据包收集系统首先会将所有的攻击数据包提取。
+% 之后将这些数据包依据标记MarkInfo中的xor\_2字段以及TTL字段进行拼接以此作为每条路径的编码。
+% 收集系统并维持许多队列，每个队列对应一条路径，其中存储着所有走过该路径的攻击数据包。
+% 因此每当收集系统接收到一个攻击数据包时便会将其放入路径对应的队列中，并通知在该队列上进行路径重组的线程进行路径重构。
+\section{路径重组阶段}
+一旦PathInfos中出现相应的路径信息，路径重组程序便被创建。
+路径重组程序的流程如下：\par
+\textbf{1.初始化变量：}\par
+\begin{enumerate}[label=\roman*.]
+  \item 创建一个cur\_xor变量，初始值设为xor\_2(注意：此时该数组中所有的MarkInfo的xor\_2值均相同)。该变量将作为路径重构的关键线索。
+  \item 创建一个cur\_len变量，初始值设为0。用于记录当前路径重构的长度。
+  \item 初始化一个路径重构队列path\_queue，用于存储重构过程中得到的接口号序列。
+\end{enumerate}
 
-\begin{table}[htbp]
-  \label{tab:model_params}
-  \caption{混合模型参数数量}
-  \centering
-  \begin{tabular}{ccc}
-    \toprule
-    \textbf{总参数} & \textbf{可训练参数数量} & \textbf{非可训练参数数量}\\
-    \midrule
-    1,417,510 & 1,412,518 & 4,992\\
-    \bottomrule
-  \end{tabular}
-\end{table}
+\textbf{2.查找匹配的MarkInfo：}
+\begin{enumerate}[label=\roman*.]
+  \item 从对应的MarkInfo数组中查找是否存在MarkInfo.xor\_1与cur\_xor相等的记录。
+  \item 如果找到匹配项，进入步骤4；否则，进入步骤3。
+\end{enumerate}
 
-\section{实验评估与分析}
-\subsection{实验环境}
-为了评估本文所提方案的有效性，本文将利用python语言来实现以上流程，并选用表~\ref{tab:env_setting}~中的配置来进行实验。
+\textbf{3.等待新数据：}
+\begin{enumerate}[label=\roman*.]
+  \item 将当前重组程序置为阻塞状态，等待收集系统发布新的MarkInfo数据。
+  \item 当接收到新数据时，判断其MarkInfo.xor\_1是否与cur\_xor相等。
+  \item 如果相等，进入步骤4；否则，继续阻塞并等待新数据。
+\end{enumerate}
 
-\begin{table}[htbp]
-  \caption{实验设备配置}
-  \label{tab:env_setting}
-  \centering
-  \begin{tabular}{ccc}
-    \toprule
-    \textbf{环境类别} & \textbf{设备项目} & \textbf{项目参数}\\
-    \midrule
-    \multirow{6}{*}{硬件环境}& CPU型号 & Intel(R) Core(TM) i7-11800H\\
-                            & CPU规格 & 8核16线程@2.30GHz\\
-                            & GPU型号 & NVIDIA GeForce RTX 3060 Laptop GPU\\
-                            & 内存大小& 16.0 GB\\
-                            & 硬盘类型& SSD\\
-                            & 硬盘大小& 1TB\\
-                            \hline
-    \multirow{3}{*}{软件环境}&操作系统&Windows 11\\
-                            &开发语言&Python 3.11.7\\
-                            &编辑器 &Visual Studio Code\\                       
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\subsection{评估指标}
-本文主要使用准确度 (Accuracy)、精确度 (Precision)、召回率 (Recall)、F1 分数 (F1 Score)、宏平均 F1 分数 (Macro Averaged F1 Score)、
-ROC-AUC 分数 (ROC-AUC Score)、混淆矩阵 (Confusion Matrix)这7个评价指标对我们的方案进行全方位的评估。以下是这7个指标的简单介绍。\par
-(1) 准确度\par
-表示模型正确预测的比例，是所有正确预测的数量除以总预测数量。
+\textbf{4.更新路径重构信息：}
+\begin{enumerate}[label=\roman*.]
+  \item 将找到的MarkInfo中的interface\_i逆序放入path\_queue中。
+  \item 根据公式重新计算cur\_xor的值,计算方式如公式~\ref{eq:calculateXor}~所示。
 \begin{equation}
-  \label{eq:val_score1}
-  Accuracy = \frac{Number of Correct Predictions}{Total Number of Predictions} = \frac{TP + TN}{TP + TN + FP + FN}
+  \label{eq:calculateXor}
+  cur\_xor = cur\_xor \oplus interface\_1 \oplus interface\_2 \oplus \cdots \oplus interface\_m
 \end{equation}
+  \item 更新cur\_len的值：cur\_len = cur\_len + m。
+\end{enumerate}
 
-(2) 精确度\par
-简称精度，也称为查准率，是所有模型预测为正类的样本中，实际为正类的比例。
-\begin{equation}
-  \label{eq:val_score2}
-  Precision = \frac{TP}{TP + FP}
-\end{equation}
+\textbf{5.判断路径重构状态：}
+\begin{enumerate}[label=\roman*.]
+  \item 比较cur\_len与PLen的值。
+  \item 如果cur\_len等于PLen，进一步检查cur\_xor是否等于0。
+  \item 如果cur\_xor不等于0，表明构建失败，进入步骤6。
+  \item 如果cur\_xor等于0，表明构建成功，进入步骤7。
+  \item 如果cur\_len不等于PLen，表明路径重构尚未完成，返回步骤2并按照当前的路径重构状态继续匹配MarkInfo完成重构。
+\end{enumerate}
 
-(3) 召回率\par
-召回率，也称为真正率、查补率，是模型正确识别为正类的样本占所有实际正类样本的比例。
-\begin{equation}
-  \label{eq:val_score3} 
-  Recall = \frac{TP}{TP + FN}
-\end{equation}
 
-(4) F1 分数\par
-F1 分数是精确度和召回率的调和平均，用于衡量模型的精确度和召回率的平衡程度。
-\begin{equation}
-  \label{eq:val_score4}
-  F1 = 2 \times \frac{Precision \times Recall}{Precision + Recall} = \frac{2TP}{2TP + FP + FN}
-\end{equation}
+\textbf{6.处理构建失败情况：}\par
+如果路径构建失败，可能是由于数据不完整或路径信息错误。
+此时，可以根据实际情况选择重新收集数据或标记该路径为无效。\par
 
-(5) 加权平均 F1 分数\par
-加权平均F1分数是一种性能评估指标，通过根据每个类别的样本量对其F1分数进行加权平均，以反映所有类别的整体性能。
-每个类别的重要性通过其在数据集中的相对比例来确定。
-
-\begin{equation}
-  \label{eq:val_score5}
-  F1_{weighted} = \sum\limits_{i=1}^{N} w_i \cdot F1_i
-\end{equation}
-\begin{flushleft}
-  \renewcommand\arraystretch{1.25}
-  \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
-  式中& $\symbf{F1_{weighted}}$ &加权平均F1分数；\\
-  &  $\symbf{N}$&类别总数；\\
-  &  $\symbf{F1_i}$ &第$i$个类别的F1分数\\
-  &  $\symbf{w_i}$ & 第$i$个类别的权重，通常由该类别的样本数量占总样本数量的比例确定。\\
-  \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
-  \end{flushleft}
-
-% (6) 混淆矩阵\par
-% 混淆矩阵是一种特定的表格布局，用于可视化模型性能，显示实际类别与模型预测类别之间的关系。
+\textbf{7.返回重构结果：}\par
+如果路径构建成功，返回path\_queue中存储的接口号序列作为重构结果。
+% 1.创建cur\_xor变量，并设初值为xor\_2(注意：此时该数组中所有的MarkInfo.xor\_2均相同)。此变量用以作为路径重构的线索。
+% 创建cur\_len变量，并设初值为0，此变量表示当前路径重构的长度。
+% 创建路径重构队列path\_queue中，用以存放重构的接口号。\par
+% 2.从对应的MarkInfo数组中查找是否存在MarkInfo.xor\_1与cur\_xor相等。
+% 如果不存在转到步骤3，如果存在转到步骤4。\par
+% 3.当前重组程序进入阻塞状态，等待收集系统发布新的消息。
+% 倘若有消息出现重组程序进入唤醒状态并判断新加入的数据包MarkInfo.xor\_1是否与cur\_xor相等。
+% 若相等转到步骤4。否则继续阻塞等待新消息。\par
+% 4.将MarkInfo中所有的MarkInfo.interface\_i逆序放入到path\_queue中，并重新计算cur\_xor的值。计算方式如公式所示。
 % \begin{equation}
-%   \label{eq:val_score6}
-%   Confusion Matrix = \begin{bmatrix} TP & FP \\ FN & TN \end{bmatrix}
+%   \label{eq:calculateXor}
+%   cur\_xor = cur\_xor \oplus MarkInfo.interface\_1 \oplus MarkInfo.interface\_2 \oplus \cdots \oplus MarkInfo.interface\_m
+% \end{equation}
+% 计算cur\_len的值：cur\_len = cur\_len + m。\par
+% 5.判断cur\_len的值是否已经等于PLen：如果相等继续判断cur\_xor是否等于0，如果不等于0，表明构建失败转到步骤6；如果等于0则表明构建成功，转步骤7；
+% 如果cur\_xor不等于PLen，表明构建尚未完成转到步骤2。\par
+% 7.构建成功，返回path\_queue中存储的接口号序列。\par
+% \section{路径重组阶段}
+% 一旦受害者服务器在检测到攻击后，便会开始收集攻击数据包。当收集到的数
+% 据包数量达到一定阈值时，受害者服务器就会进入收敛状态。在这个状态下，服
+% 务器会利用其中带有标记的攻击数据包来进行路径重构。算法~\ref{alg:path_reconstruction}~提供了受害者服务器如何在这个过程中
+% 利用标记数据包进行路径重构的详细内容。路径重构的流程为:
+
+% \input{pseudocode/path_reconstruction.tex}
+
+% \begin{enumerate}[label=(\alph*).]
+%   \item \emph{划分攻击数据包结合S：}首先，将攻击数据包集合 $S$ 根据
+%   数据包的 XOR2 字段和 TTL 字段的不同值划分为不同的子集 $U_i$ ，并
+%   将这些子集全部添加到集合 $S'$ 中。
+%   \item \emph{根数据包集合的收集与干扰数据包排除：}接下来，对 $S'$ 
+%   中的每个子集$U_i$进行遍历，从每个子集$U_i$中收集根数据包并添加到根
+%   数据包集合 $T$ 中，并将这些根数据包以及可能的干扰数据包从子集 
+%   $S_i'$ 中剔除。
+%   \item \emph{获取接口号路径：}针对步骤(b)所得到的根数据包集合 
+%   $T$，利用这些根数据包以及相应的子集$U_i$，调用算法
+%   ~\ref*{alg:try_construct}~进行路径重构，从而得到路由器接口号的路
+%   径。
+%   \item \emph{获取攻击路径：}利用步骤(c)所得到接口号路径逐个查询路
+%   由器最终获得路径上的所有路由器。
+% \end{enumerate}
+
+% 步骤(a)，由于来自同一结点且走过相同路径的数据包的 TTL 值必定相同，同
+% 时数据包中的 XOR2 字段包含了从攻击者到受害者服务器的整条路径上的所有
+% 路由器的接口号的异或值，因此，首先结合数据包中的 XOR2 字段和 TTL 字
+% 段将攻击数据包集合分成不同的子集。
+
+% 对于步骤 (b) 和步骤 (c) ，由于在我们的算法中，XOR1字段只会在路由器进
+% 行标记时才重新计算并写入，如果不进行标记，那么 XOR1字段将与路由器接口
+% 字段保持不变。改变的只有 XOR2 字段，因为 XOR2字段反映了整个数据包所
+% 经过的路径，而 XOR1 字段只记录了已标记的路由器。我们的方案具有这样的
+% 特性，假设攻击数据包在经过$ R_1 \dots R_i \dots R_d $ 后到达受害者
+% ($ i \in [1,d] $表示距离发送者的路由器跳数)，$ \{R_{x_1} \dots 
+% R_{x_n}\}$($n \in [2,d]$)依次对其进行了标记，对应$ XOR1 = R_{x_1}
+%  \oplus \dots \oplus R_{x_n}$，那么有$x_j - x_{j-1} = 1,j \in 
+%  [2,n]$。因此，我们可以使用 XOR1 字段作为线索来按序获取整条路径上的
+%  所有路由器接口号，这些按顺序排列的路由器接口号序列即可表示它们所走过
+%  的完整路径，我们将这些由有序的路由器接口号序列所表示的路径称为接口号
+%  路径。获取接口号路径的具体方法是首先找到 XOR1=XOR2 的数据包，这些数
+%  据包记录了到达受害者的最后一跳路由器接口号，可以看作线索的头部。在本
+%  文中，我们将这些数据包称为根数据包。因此，步骤 (b) 的任务是从每个子
+%  集中提取出根数据包集合T，并在步骤 (c) 中使用算法
+%  ~\ref*{alg:try_construct}~来获取路由器接口号路径。
+
+% 步骤(d)，将利用这些接口号路径来获取实际的攻击路径。具体方法是，受害者
+% 服务器首先从自己的网关路由器开始，递归查询路由器接口号对应的上游路由
+% 器，直到查询完所有路由器接口号对应的路由器结点，从而获得路由器结点路
+% 径，也就是攻击路径。
+
+% \section{Try Construct Procedure算法}
+
+% 接下来我们将会详细介绍算法~\ref*{alg:try_construct}~的内容。
+
+
+
+% \begin{enumerate}[label=(\alph*).]
+%   \item 将base\_packet中的所有接口号逆序添加到当前尝试构建的接口路
+  
+%   径current\_interface\_path中，
+%         并重新计算算法中的xor1变量、添加的接口号个数append\_num、该路径剩余的接口号个数remaining\_ipath\_legth。
+%   \item 若remaining\_ipath\_legth = 0，执行步骤(c)，否则执行步骤(f)。
+%   \item 若xor1此时为空值执行步骤(d)，否则执行步骤(e)。
+%   \item 将当前尝试构建的接口号路径current\_interface\_path添加到接口号路径结果集合result\_interface\_path中，再将current\_interface\_path置为空后返回构建结果True。
+%   \item 从当前尝试构建的接口号路径current\_interface\_path中去掉刚添加的append\_num个接口号，返回构建结果False。
+%   \item 遍历集合U，从U中根据xor1变量的值收集下一个所有可能的标记数据包base\_packet，并将它们添加到集合packets中。遍历完U后，若集合packets的长度为0执行步骤(g)，否则执行步骤(h)。
+%   \item 从当前尝试构建的接口号路径current\_interface\_path中去掉刚添加的append\_num个接口号，返回构建结果False。
+%   \item 遍历packets集合中的每个packet，从集合U中去掉packet，将packet作为新的base\_packet递归调用本过程开始下一轮尝试构建，并取得尝试构建的结果。若构建成功，向上层调用返回结果True，否则再将本次递归调用使用的packet添加到U中,继续遍历，直到遍历完packets集合中所有的packet。
+%   \item 从当前尝试构建的接口路径current\_interface\_path中去掉刚添加的append\_num个接口号，向上层调用返回构建结果False。
+% \end{enumerate}
+
+
+% 在算法~\ref*{alg:try_construct}~中我们使用xor1变量作为依次找到包含相关路由信息的数据包线索。而变量append\_num则用于记录每次构建过程中向current\_interface\_path添加的接口号数量，这在构建失败时可以用来恢复current\_interface\_path到之前的状态。remaining\_ipath\_length 控制了current\_interface\_path的长度，当remaining\_ipath\_length为0时，将不能再向current\_interface\_path添加接口号。此时有两种可能结果：构建成功或构建失败。如果xor1为0，可能构建成功；否则必定失败。如果remaining\_ipath\_length不为0，表示路径仍未完整，需要继续利用xor1作为线索，逐一尝试构建数据包，直到构建成功或失败，下面是算法3.3的相关伪代码。
+
+% \input{pseudocode/TRY_CONSTRUCT.tex}
+
+% 为了更容易理解这一过程，图~\ref*{fig:try_construct}~表示了算法~\ref*{alg:try_construct}~的流程图。
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width = 0.8\textwidth]{try_construct.png}
+%   \caption{算法~\ref*{alg:try_construct}~流程图}
+%   \label{fig:try_construct}
+% \end{figure} 
+
+% \section{概率模型和最小期望的数据包数}
+% \label{sec:mainbody} 
+% 假设攻击者距离受害者服务器有d跳，IGPPM方案中数据包记录m个路由器接口
+% 号，则从攻击者到受害者服务器的完整路径中的所有路由器总共可分为$k = 
+% \lceil d/m \rceil$组，标记概率为p。不同于传统概率包标记法的概率模型
+% ，本方案只有当前一组路由器进行标记后，后一组路由器才可进行p概率确定
+% 是否标记；若前一个路由器不标记，那么之后的所有路由器也将不会进行标
+% 记，这将导致则受害者服务器在收到一个标记数据包时，此标记数据包携带
+% 第i组路由信息的概率为：
+% \begin{equation}
+%   \label{eq:Probability of i-th Router}
+%   f(i) = 
+%   \begin{cases} 
+%     p^{i-1}(1-p), & 1 \leq i \leq k-1 \\
+%     p^{k-1}, & i = k 
+%   \end{cases}
+% \end{equation}
+% 因此受害者服务器收集的数据包数量能够覆盖所有路由器是由
+% \begin{equation}
+%   \label{eq:Path Coverage Probability}
+%   g(p) = \min\{(1 - p), p(1 - p), \ldots, p^{k-2}(1 - p), p^{k-1}\}
+% \end{equation}
+% 所决定的，完成路径重构所需的最少数据包数量为：
+% \begin{equation}
+%   \label{eq:Minimum Packets for Path Reconstruction}
+%   z(p) = \frac{1}{g(p)} = \frac{1}{\min\{(1 - p), p(1 - p), \ldots, p^{k-2}(1 - p), p^{k-1}\}}
 % \end{equation}
 
-% (7) ROC-AUC 分数\par
-% ROC-AUC 分数是接收者操作特征（ROC）曲线下面积的度量，用于评估分类器的预测能力。
+
+% 要使$z(p)$取最小值，只需$g(p) = \min\{(1 - p), p(1 - p), \ldots, p^{k-2}(1 - p), p^{k-1}\}
+% $取最大值即可。其中$\min\{(1 - p), p(1 - p), \ldots, p^{k-2}(1 - p)\} = p^{k-2}(1 - p)$，因此$g(p) = \min\{(1 - p), p(1 - p), \ldots, p^{k-2}(1 - p), p^{k-1}\}
+%  = \min\{p^{k-2}(1 - p), p^{k-1}\}$。进一步分析知，当$p<1/2$时，$p^{k-1}<p^{k-2}(1 - p)$，此时$g(p) = p^{k-1}$；当$p>1/2$时，$p^{k-2}(1 - p)<p^{k-1}$，此时$g(p) = p^{k-2}(1 - p)$
+% ，即
 % \begin{equation}
-%   \label{eq:val_score7}
-%   AUC = \int_{0}^{1} TPR(FPR) \, d(FPR)
+%   \label{eq:Simplified Probability of i-th Router}
+%   g(p) = 
+%   \begin{cases} 
+%     p^{k-1}, & p \leq \frac{1}{2} \\
+%     p^{k-2}(1 - p), & p > \frac{1}{2}
+%   \end{cases}
 % \end{equation}
 
-以上五式\ref{eq:val_score1}、\ref{eq:val_score2}、\ref{eq:val_score3}、\ref{eq:val_score4}、\ref{eq:val_score5}%\ref{eq:val_score6}、\ref{eq:val_score7}%
-中,
-  $TP$(True Positives)表示正确地将正类预测为正类;
-  $TN$(True Negatives)表示正确地将负类预测为负类；
-  $FP$(False Positives)表示错误地将负类预测为正类；
-  $FN$(False Negatives)表示错误地将正类预测为负类。
+% 再进一步分析知当$k>2$时，$p = \frac{k-2}{k-1}$，$g(p)$最大；当$k \leq 2$，
+% $p = 1/2$时，$g(p)$最大。也就是说当$k = \lceil d/m \rceil >2$时，
+% $p = \frac{k-2}{k-1}$,完成路径重构所需数据包数量最少，为
+% $\frac{(k-1)^{k-1}}{(k-2)^{k-2}}$，当$k = \lceil d/m 
+% \rceil \leq 2$，$p = 1/2$，完成路径重构所需数据包数量最少为
+% $2^{k-1}$。
 
-\subsection{特征编码效果实验评估}
+\section{实验设计和结果分析}
+\label{sec:bib}
+为了验证本方案进行路由回溯的速度与准确性，本文设置了两组对比实验分别验证这两个指标。
+首先，在第一组实验中，我们利用CAIDA IPv4 Prefix-Probing Traceroute数据集构建了网络拓扑，并选定受害者结点。
+随后，从距离受害者不同距离的结点处向受害者结点发送数据包，以测试完成路径重构所需要收集的数据包数量，从而反映回溯速度。
+我们将这一结果与PPM-Dynamic和PPM-Fixed方案进行了细致地对比，以全面评估本方案的性能。\par
 
-  在本次实验中，我们通过比较了特征编码前后各种机器学习和深度学习模型的准确率(图~\ref{fig:comapre_accuracy_encoding}~以及表~\ref{tab:model_performance}\footnote{由于表格长度有限，朴素贝叶斯的表现我们没有放到表格中，朴素贝叶斯特征编码前后各性能指标变化：Acc 97.72\% \rightarrow 97.27\% ,f1\_mac 0.3376 \rightarrow 0.2166, f1\_wei 0.9726 \rightarrow 0.9729。}
-  ~)，得出了一些发现。
-  \begin{figure}[htbp]
-    \centering
-    \includegraphics[width = \textwidth]{acc.png}
-    \caption{特征编码前后模型预测准确率对比条状图}
-    \label{fig:comapre_accuracy_encoding}
-    \end{figure}
-    首先，决策树模型显示出了对输入数据表示形式的鲁棒性，其准确率在特征编码前后保持不变。而逻辑回归和K近邻这样的模型则在特征编码后显示出了轻微的准确率提升，暗示了特征编码对于这类模型可能带来的轻微性能改进。
-  相反，朴素贝叶斯模型在特征编码后的准确率却明显下降，可能是由于特征编码改变了数据的分布假设，从而对基于概率的模型产生了较大影响。
-  深入到深度学习模型，ResNet和BiGRU在特征编码后展现出准确率的稳定提升，这可能归因于这些模型能够从编码后的特征中学习到更加复杂和深层的数据表示。
-  特别值得注意的是，采用\textbf{模态特征融合策略的ResNet-BiGRU模型}，在特征编码前后都表现出了所有模型中最高的准确率，尤其是在特征编码后，其准确率达到了的99.46\%，凸显了模态融合在提高模型处理能力方面的显著优势。\par
-  \begin{figure}[htbp]
-    \centering
-    \includegraphics[width = \textwidth]{f1-mac.png}
-    \caption{特征编码前后模型f1 macro score对比条状图}
-    \label{fig:f1_macro_score}
-    \end{figure}
-  \begin{figure}[htbp]
-    \centering
-    \includegraphics[width = \textwidth]{f1-wei.png}
-    \caption{特征编码前后模型f1 weighted score对比条状图}
-    \label{fig:f1_weighted_score}
-\end{figure}
+接着，第二组实验则侧重于准确性的验证。
+我们利用NS-3模拟器创建了一个网络仿真环境，并在此环境中利用网络结点向服务器发送大量数据包模拟DDos攻击。
+通过这一实验，我们能够准确地评估本方案在进行路径重构时的准确率，从而确保其在实际应用中的可靠性。
+以下是对这两组实验的详细解读与结果分析。
 
-\begin{table}[htbp]
-  \centering
-  \caption{特征编码前后模型表现}
-  \label{tab:model_performance}
-  \begin{tabular}{ccccccccc}
-  \toprule
-  & DT & LR & KNN & Ada & ResN & BiG & RNB-NMF& RNB-MF\\
-  \midrule
-  \multicolumn{9}{c}{\textbf{特征编码前}}\\
-  Acc & 99.19\% & 98.66\% & 98.68\%  & 97.22\% & 98.92\% & 98.85\% & 98.89\% & 99.45\% \\
-  f1\_mac & 0.5422 & 0.3730 & 0.4042  & 0.3609 & 0.4110 & 0.493 & 0.518 & 0.529 \\
-  f1\_wei & 0.9925 & 0.9874 & 0.9872  & 0.9704 & 0.9892 & 0.9885 & 0.9891 & 0.9945 \\
-  \midrule
-  \multicolumn{9}{c}{\textbf{特征编码后}}\\
-  Acc & 99.19\% & 98.72\%\uparrow & 98.70\%\uparrow  & 97.14\%\downarrow & 98.94\%\uparrow & 98.85\% & 98.91\%\uparrow & 99.46\%\uparrow \\
-  f1\_mac & 0.5378\downarrow & 0.3871\uparrow & 0.4090\uparrow  & 0.3197\downarrow & 0.4166\uparrow & 0.495\uparrow & 0.52\uparrow & 0.53\uparrow \\
-  f1\_wei & 0.9925 & 0.9879\uparrow & 0.9873\uparrow  & 0.9723\uparrow & 0.9898\uparrow & 0.9885 & 0.9892\uparrow & 0.9946\uparrow \\
-  \bottomrule
-  \end{tabular}
-\end{table}
-整体而言，所有模型在准确率方面都表现出较高的水平，特别是在特征编码后，大多数模型的准确率略有提升，说明特征编码对模型性能有正面影响。
-具体到F1分数，F1 Macro(图~\ref{fig:f1_macro_score}~)和F1 Weighted(图~\ref{fig:f1_weighted_score}~)分数在特征编码后也显示出类似的趋势。
-在深度学习模型方面，ResNet和BiGRU表现出了较好的性能提升，尤其是在特征编码后，这可能归因于深度学习模型能够从编码后的特征中学习到更加复杂的表示。
-同样值得注意的是，采用\textbf{模态融合策略的ResNet-BiGRU模型}在所有评价指标上都表现最优，无论是在特征编码前还是编码后。
-通过观察完数据后，我们可以看到特征编码和模型选择对于提升模型性能具有重要意义。
-模态特征融合技术尤其在提高复杂模型的准确率和F1分数方面显示出显著的优势，这为未来在模型设计和特征工程方面的研究提供了有价值的参考。\par
+\subsection{溯源速度测试}
+\textbf{1.数据集介绍}\par
+CAIDA IPv4 Prefix-Probing Traceroute Dataset由CAIDA提供，包含20,377,233条路径追踪记录。
+这些记录涵盖了899,916个不同的IP地址。注意，本文只使用了可以到达指定目的地且没有循环的部分路径追踪记录。\par
+% 数据集中的接口级（Interface level）跳数长度最小为1，最大为31，平均跳数长度为15.43。\par
+\textbf{2.实验评估指标}\par
+在本次溯源速度测试中，我们使用完成路径重构所需收集的数据包数量作为关键验证指标。
+数据包数量是衡量溯源速度的重要指标之一，因为它直接关系到网络路径回溯或安全分析任务的执行效率和速度。
+通过减少完成溯源所需的数据包数量，可以显著提升溯源的速度，从而更快地获取分析结果。
+这不仅能够减少网络负载，降低资源消耗，还能提高整体分析效率，为网络安全的实时监测和响应提供有力支持。
+因此，在本次实验中，我们重点验证了本方案在减少数据包数量方面的优势。\par
 
-\subsection{数据集平衡处理效果实验评估}
-在处理网络流量数据时，一个常见的挑战是数据的不平衡性。特别是在网络安全领域，正常流量的样本远多于异常或攻击流量的样本。
-例如，本章所使用到的数据集种正常流量占总样本的87\%，这意味着即使一个模型将所有流量都预测为正常流量，其准确率也能达到87\%。
-然而，这种模型对于检测异常流量来说是无效的，因为它无法识别出任何异常样本，这显然不是我们期望的结果。\par
+\textbf{3.实验设计}\par
+本文从数据集中筛选出跳数达到最大的追踪记录，并将这些记录中的目的结点作为受害者结点。
+随后，我们按照距离d从1开始递增的方式，随机选取距离受害者d跳的结点，模拟攻击结点向向受害者结点发送攻击数据包。
+受害者结点负责收集这些数据包，并应用路径重构算法来还原数据包的传输路径。
+为了确保实验结果的可靠性和一致性，我们对每个距离d都进行了1,000次重复实验并取平均值。
+此外，为了模拟更真实的实验环境，我们还引入了一些额外的结点作为用户结点。
+这些用户结点模拟了实际网络中的其他用户活动，增加了实验的复杂性和真实性。\par
+\textbf{4.实验结果与分析}
+% 图~\ref*{fig:packets_num}~显示了本方案在 $m=2$ 和 $m=4$ 的情况下，与 PPM-Fixed 
+% 和 PPM-Dynamic 方案相比，完成不同距离的路由回溯，达到95\%成功率所需的最少数据包数
+% 量与路径长度之间的关系。
 
+% 可以看出，本文提出的方案在完成路径重构时所需要的数据包数量要远远少于PPM-Fixed方案。
+% 当m=2时本方案略优于PPM-Dynamic方案，当m=4时则明显优于以上两种PPM类方案。另外，
+% 仔细观察图像可以发现，本文提出的方案表现出阶梯性特征，这是因为该方案采用了分组
+% 标记的方法：不管跳数d相差多少，只要$k = \lceil d/m \rceil$相同，完成路径重构所需
+% 要的数据包数量就会相同。
 
-\begin{table}
-  \centering
-  \caption{数据集平衡处理前后数据量变化}
-  \label{tab:attack_num}
-\begin{tabular}{ccc}
-\toprule
-\textbf{攻击类型}&\textbf{过采样前}&\textbf{过采样后}\\
-\midrule
-Fuzzers&3775&50844\\
-Analysis&382&50844\\
-Backdoors&400&50844\\
-DoS&879&50844\\
-Exploits&4038&50844\\
-Generic&5587&50844\\
-Reconnaissance&1316&50844\\
-Shellcode&164&50844\\
-Worms&18&50844\\
-normal&508447&508447\\
-  % 2 4 8 16 32 64 128
-  %        104  96
-  %        108  112
-  %        110
-  %        111
-  \bottomrule
-\end{tabular}
-  
-\end{table}
+图\ref{fig:packets_num}是本方案在m=2和m=4的情况下，与PPM-Fixed和PPM-Dynamic方案相比，完成不同距离的路由回溯所需的最少数据包数量与路径长度之间的关系。
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width = \textwidth]{smote.png}
-  \caption{SMOTE过采样前后，1000个样本中各种攻击类别的样本点变化，这里省略了normal样本点}
-  \label{fig:prepostsmote}
+  \includegraphics[width = 0.8\textwidth]{packets_num.png}
+  \caption{路径重建所需数据包数量与路径长度关系}
+  \label{fig:packets_num}
+\end{figure} 
+从图中可以看出，本文提出的方案在完成路径重构时所需要的数据包数量要远远少于PPM-Fixed方案。
+当m=2时，本方案略优于PPM-Dynamic方案；当m=4时，则明显优于以上两种PPM类方案。
+这一结果表明，本方案在溯源速度方面具有显著优势。
+此外，仔细观察图像可以发现，本文提出的方案表现出阶梯性特征。
+这是因为该方案采用了分组标记的策略：无论跳数d相差多少，只要$k=\lceil d/m \rceil$相同，完成路径重构所需要的数据包数量就会相同。
+通过以上的实验验证和结果分析，本方案相较于传统的PPM方案，在溯源速度方面展现出了明显的优越性。\par
+
+另外值得注意的是，在传统的PPM类方案中，路径重构所需的数据包数量通常指的是实现路由覆盖所需的最少数据包数量。
+因此，在本文中，对于PPM完成路径重构所需的数据包数量的评估，实际上仅是基于路径覆盖测试的数据包统计。
+实际上，如果期望通过数据包的数量关系直接获取一条完整的网络路径，那么所需的数据包数量将会非常庞大。
+不过，本文所提方案在完成路径重构时，采用了接口号以及两个异或字段以及TTL来实现溯源，这使得本文的方法在路径重构时具有更高的灵活性和效率。
+因此，在本文的方案中，完成路径重构所需的数据包数量即为取得一条实际路径所需的数据包数量，这大大减少了重构路径所需的数据包开销。
+\subsection{溯源准确率测试}
+\textbf{1.仿真软件介绍}\par
+在本次实验中本文使用NS-3网络模拟器来构建实验环境。
+NS-3是一个先进的开源网络模拟器，广泛应用于网络研究和教育领域，它通过离散事件模拟技术支持各种有线、无线网络协议和设备的性能评估。
+该模拟器以其模块化设计和丰富的模型库而闻名，允许用户灵活构建复杂的网络场景。\par
+% NS-3的主要开发语言是C++，但它也提供了Python绑定，增加了编程的灵活性和易用性。
+% 它被设计来模拟实际网络环境中的行为，帮助研究人员在受控的环境下测试和验证网络算法和协议的性能。
+% 得益于其广泛的文档、示例代码和一个活跃的开源社区，NS-3对于那些希望深入理解网络原理、设计新的网络协议或评估网络安全机制的人来说，是一个极为宝贵的资源。
+\textbf{2.实验设计}\par
+本文首先借助NS-3仿真工具构建了一个如图~\ref{fig:network_enviroment}~所示的逻辑拓扑网络，其中包含14个转发结点（$R_i$，其中i的范围是1到14），10个作为攻击者结点的数据发送结点（$PC_j$，其中j的范围是1到10），以及一个作为受害者结点的数据接收结点（Server）。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{network_enviroment.drawio.png}
+  \caption{NS-3模拟器生成的逻辑拓扑结构}
+  \label{fig:network_enviroment}
+\end{figure}
+为了评估网络在不同攻击规模下的性能表现，我们首先使用5个攻击结点向受害者结点发送攻击数据包。
+随后，我们逐步增加攻击结点的数量，以模拟网络遭受更大规模攻击的场景。
+当攻击结点数量超过10个时，我们采取了以$R_5$为网络拓扑中心随机添加转发结点的策略，并在每个新添加的转发结点上挂载一个攻击结点，以模拟攻击行为的进一步扩散和复杂化。
+以下是本次实验的结果与分析部分。\par
+\textbf{3.实验结果与分析}\par
+图~\ref{fig:traceback_accuracy}~是我们的方案与ICMP Ping方案以及PPM方案在网络仿真环境下的对比结果。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{traceback_accuracy.png}
+  \caption{拓扑还原准确率}
+  \label{fig:traceback_accuracy}
 \end{figure}
 
-为了解决这一问题，我们采用了SMOTE算法对异常样本进行过采样。
-通过这种方法，我们能够增加异常流量样本的数量，从而改善训练数据的平衡性。
-过采样的结果如表~\ref{tab:attack_num}所示，从中可以看出，过采样后各类样本的数量有了明显的变化。
-此外，我们使用PCA（主成分分析）方法将样本降维到2D平面上，并在图~\ref{fig:prepostsmote}中展示了过采样前后的情况。
-从图中可以清晰地看到，攻击样本的数量在过采样后有了显著的增加，这有助于模型学习到更加均衡的数据表示。
-最终，我们评估了过采样对模型性能的影响。
-表~\ref{tab:model_performance_oversampling}~、~\ref{tab:oversampling_performance}~展示了过采样前后各类样本检测的精确度和召回率的变化。
-
-
-\begin{table}[htbp]
-  \centering
-  \caption{过采样前后各种攻击检测召回率变化}
-  \label{tab:model_performance_oversampling}
-  \begin{tabular}{cccccccccc}
-  \toprule
-  & DT & LR & KNN & NB & Ada & ResN & BiG & RNB-NMF & RNB-MF \\
-  \midrule
-  \multicolumn{10}{c}{\textbf{过采样前}}\\
-  Fuzzers & 0.825 & 0.624 & 0.614 & 0.019 & 0.064 & 0.713 & 0.709 & 0.699 & 0.842 \\
-  Analysis & 0.115 & 0 & 0 & 0.566 & 0.844 & 0 & 0 & 0 & 0.361 \\
-  Backdoors & 0 & 0 & 0 & 0 & 0.059 & 0 & 0 & 0 & 0.288 \\
-  DoS & 0.165 & 0.051 & 0.114 & 0.008 & 0 & 0.017 & 0.322 & 0.341 & 0.458 \\
-  Exploits & 0.666 & 0.705 & 0.639 & 0.04 & 0.001 & 0.808 & 0.716 & 0.796 & 0.796 \\
-  Generic & 0.962 & 0.925 & 0.931 & 0.956 & 0.921 & 0.935 & 0.876 & 0.899 & 0.943 \\
-  Reconnaissance & 0.91 & 0.755 & 0.58 & 0.019 & 0.854 & 0.739 & 0.743 & 0.757 & 0.946 \\
-  Shellcode & 0.66 & 0 & 0.14 & 0.98 & 0.76 & 0.067 & 0.045 & 0.073 & 0.937 \\
-  Worms & 0 & 0 & 0 & 0.75 & 0 & 0 & 0 & 0 & 0 \\
-  normal & 1 & 0.997 & 0.997 & 0.993 & 0.99 & 0.998 & 0.999 & 0.999 & 0.999 \\
-  \midrule
-  \multicolumn{10}{c}{\textbf{过采样后}}\\
-  Fuzzers & 0.838 & 0.041 & 0.701 & 0.099 & 0.606 & 0.723 & 0.714 & 0.703 & 0.857 \\
-  Analysis & 0.452 & 0.032 & 0.565 & 0 & 0 & 0.013 & 0 & 0 & 0.564 \\
-  Backdoors & 0.362 & 0.31 & 0.431 & 0.931 & 0.948 & 0 & 0 & 0 & 0.412 \\
-  DoS & 0.521 & 0 & 0.479 & 0.009 & 0 & 0.023 & 0.125 & 0.16 & 0.634 \\
-  Exploits & 0.807 & 0 & 0.659 & 0.026 & 0 & 0.809 & 0.714 & 0.806 & 0.822 \\
-  Generic & 0.992 & 0.187 & 0.948 & 0 & 0.926 & 0.941 & 0.875 & 0.893 & 0.941 \\
-  Reconnaissance & 0.995 & 0 & 0.872 & 0.511 & 0 & 0.724 & 0.742 & 0.759 & 0.933 \\
-  Shellcode & 1 & 0 & 0.933 & 0.133 & 0.867 & 0.132 & 0.044 & 0.081 & 0.961 \\
-  Worms & 1 & 0 & 1 & 0 & 1 & 0 & 0 & 0 & 0 \\
-  normal & 1 & 0.99 & 0.97 & 0.624 & 0.985 & 0.996 & 0.999 & 0.999 & 0.999 \\
-  \bottomrule
-  \end{tabular}
-\end{table}
-  
-
-
-\begin{table}[htbp]
-  \centering
-  \caption{过采样前后各种攻击检测精度变化}
-  \label{tab:oversampling_performance}
-  \begin{tabular}{lccccccccc}
-  \toprule
-  & DT & LR & KNN & NB & Ada & ResN & BiG & RNB-NMF & RNB-MF \\
-  \midrule
-  \multicolumn{10}{c}{\textbf{过采样前}} \\
-  Fuzzers & 0.659 & 0.455 & 0.497 & 0.667 & 0.545 & 0.542 & 0.534 & 0.536 & 0.697 \\
-  Analysis & 1 & 0 & 0 & 0.117 & 0.054 & 0 & 0 & 0 & 0.201 \\
-  Backdoors & 0.0 & 0.0 & 0 & 0 & 0.092 & 0 & 0 & 0 & 0 \\
-  DoS & 0.255 & 0.279 & 0.206 & 0.222 & 0.0 & 0.250 & 0.23 & 0.17 & 0.27 \\
-  Exploits & 0.662 & 0.623 & 0.649 & 0.763 & 0.200 & 0.620 & 0.411 & 0.656 & 0.686 \\
-  Generic & 0.966 & 0.988 & 0.983 & 0.589 & 0.997 & 0.966 & 0.746 & 0.826 & 0.979 \\
-  Reconnaissance & 0.894 & 0.562 & 0.567 & 0.019 & 0.320 & 0.747 & 0.743 & 0.863 & 0.905 \\
-  Shellcode & 0.767 & 0.0 & 0.538 & 0.04 & 0.365 & 1 & 0.665 & 0.665 & 0.732 \\
-  Worms & 0.0 & 0 & 0 & 0.009 & 0 & 0 & 0 & 0 & 0 \\
-  normal & 1 & 0.998 & 0.997 & 0.998 & 0.99 & 0.998 & 0.999 & 0.999 & 0.999 \\
-  \midrule
-  \multicolumn{10}{c}{\textbf{过采样后}} \\
-  Fuzzers & 0.756 & 0.22 & 0.409 & 0.427 & 0.465 & 0.566 & 0.512 & 0.536 & 0.772 \\
-  Analysis & 0.065 & 0.037 & 0.147 & 0 & 0 & 0.052 & 0 & 0 & 0.253 \\
-  Backdoors & 0.053 & 0.032 & 0.135 & 0.011 & 0.140 & 0.013 & 0.112 & 0 & 0 \\
-  DoS & 0.17 & 0 & 0.162 & 0.002 & 0 & 0.102 & 0.24 & 0.205 & 0.24 \\
-  Exploits & 0.762 & 0 & 0.458 & 0.412 & 0 & 0.505 & 0.311 & 0.493 & 0.801 \\
-  Generic & 0.973 & 0.274 & 0.972 & 0 & 0.996 & 0.921 & 0.446 & 0.801 & 0.978 \\
-  Reconnaissance & 0.889 & 0 & 0.333 & 0.007 & 0 & 0.355 & 0.636 & 0.799 & 0.884 \\
-  Shellcode & 0.793 & 0 & 0.108 & 0.035 & 0.28 & 0.204 & 0.541 & 0.637 & 0.774 \\
-  Worms & 0 & 0 & 0.004 & 0 & 0.002 & 0 & 0 & 0 & 0 \\
-  normal & 0.999 & 0.976 & 0.999 & 0.999 & 0.995 & 0.996 & 0.999 &0.999 & 0.999 \\
-\bottomrule
-\end{tabular}
-\end{table}
-通过分析以上表格可知，过采样后，绝大多数模型在检测特定攻击类型时的召回率有了显著提高。
-尤其是对于那些原本难以被检测到的攻击类型，如Backdoors、Analysis等，过采样为这些攻击类型提供了更多的样本，使得模型能够学习到更加丰富的特征，从而在这些攻击类型上获得了更好的召回率。
-在检测精度方面，虽然过采样导致某些模型在某些攻击类型上的精度有所下降，这主要是因为增加了更多的少数类样本，模型在尝试提高对这些少数类的识别能力时，可能会牺牲一些对多数类的识别精度。
-然而，从整体上看，模型的总体性能是得到了改善的。\par
-
-另外，\textbf{RNB-MF模型}，即经过模态融合的残差网络和双向门控循环单元的组合，表现出了卓越的性能。
-在过采样后，不仅召回率在几乎所有攻击类型上都有所提高，其精度也在大多数情况下得到了维持以及小幅度的提升。
-这说明RNB-MF模型能够有效利用过采样带来的额外信息，而且模态融合策略提高了模型处理不平衡数据的能力，使其在面对复杂的攻击检测任务时，能够更加准确地识别出少数类攻击样本，同时保持对正常流量的高识别精度。
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width = 0.8\textwidth]{resnet_bigure_nmf.png}
-  \caption{RNB-NMF各epoch的损失曲线以及准确率曲线}
-  \label{fig:ResNet-BiGRU-NoFusion}
-\end{figure}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width = 0.8\textwidth]{resnet_bigure_curve.png}
-  \caption{RNB-MF各epoch的损失曲线以及准确率曲线}
-  \label{fig:ResNet-BiGRU-Fusion}
-\end{figure}
-图~\ref{fig:ResNet-BiGRU-NoFusion}~、~\ref{fig:ResNet-BiGRU-Fusion}~分别是未经过模态融合的残差网络和双向门控循环单元的组合以及经过模态融合的残差网络和双向门控循环单元的组合。
-通过观察损失函数图表。未经模态融合的模型训练和验证损失都在逐渐减小，但验证损失的波动较大，这可能表明模型在训练集上有过拟合的趋势。
-相比之下，经过模态融合的模型损失下降更为平滑，且在训练后期，验证损失几乎与训练损失保持一致，这表明模型具有更好的泛化能力。\par
-
-从准确率图表来看，未经模态融合的模型的准确率虽然相对较高，但在训练过程中出现了一些波动，尤其是验证准确率，这进一步暗示了可能的过拟合问题。
-然而，经过模态融合的模型不仅在训练初期准确率快速攀升，而且在后续训练中维持在非常高的水平，几乎没有波动，这显示了模型对于训练和验证数据的稳定预测能力。\par
-
-
+从图中可以看出，随着攻击结点数的不断增加，本文的所提出的方案准确率相对较高并且相对稳定。
+而ICMP Ping方案以及PPM方案随着结点数的增加，溯源准确率极速下降。
+因此我们可以得出结论，对于较大规模的网络攻击，本文的所提出的方案仍能以较高的准确率完成溯源任务。
 \section{本章小结}
-本章主要围绕RNB-MF模型展开，首先从模型的原理和结构入手，接着详细介绍了模型在数据集上针对性能进行评估的整个过程，包括特征编码、过采样、模型构造、模型训练以及实验结果分析。
-通过在实验数据集上与众多经典机器学习和深度学习模型进行对比分析，结果显示我们的模型展现出了显著的优势。\par
+% 在本章中，我们提出了一种基于路由器接口号分组的概率包标记溯源方案。
+% 随后我们对本方案的设计从设计的记录标记信息的结构体、路由器的标记阶段的原理和流程、标记数据包收集的原理和流程、路径重构阶段的流程逐步展开叙述。
+% 最后我们进行了一系列的实验评估，分别测试了本文所提方案在溯源速度以及准确率方面的表现，经实验结果显示我们的方案在溯源速度和准确率方面均表现优异。
+在本章中，本文提出了一种基于路由器接口号分组的概率包标记溯源方案。
+首先，本文介绍了该方案的设计架构和设计目的：旨在提高传统概率包标记溯源方案的溯源速度和准确性。
+接着，本文深入阐述了方案的设计细节，包括记录标记信息的结构体设计、路由器标记阶段原理和流程、标记数据包收集的原理和流程以及路径重构阶段的流程。
+最后，为了验证本方案的性能，本文进行了一系列实验评估，分别测试了本方案在溯源速度以及准确率方面的表现，经实验结果表明，本文的所提出的方案在溯源速度和准确率方面均表现出色。
+% 为了验证本文所提方案的路由回溯能力，我们设计了在单个攻击者环境下的路由回溯实验。
+% 图~\ref*{fig:packets_num}~显示了本方案在 $m=2$ 和 $m=4$ 的情况下，与 PPM-Fixed 
+% 和 PPM-Dynamic 方案相比，完成不同距离的路由回溯，达到95\%成功率所需的最少数据包数
+% 量与路径长度之间的关系。其中IGPPM方案与PPM-Fixed方案所采用的标记概率分别为
+% $p_{IGPPM}=\frac{k-2}{k-1}$，$p_{PPM-Fixed} = \frac{1}{d}$，也即$p$的选择能够分
+% 别使这几种回溯方案的回溯能力达到最佳状态，完成IP回溯所需要的数据包数量最少。
 
-然而，在执行多分类任务时，我们观察到，尽管采用了过采样技术，某些攻击类型由于样本数量本身不足，其检测性能仍未显著提高。
-为了增强模型对这些少见攻击类型的识别能力，我们可以考虑两种策略：一是通过收集更多的少数类样本来增加数据集中的实际样本量；二是通过调整权重交叉熵损失函数来提高这些特定攻击类型的损失权重。
-采用后一策略可能会使模型在提高某一攻击类型的识别率的同时牺牲总体的检测精度，导致误报率升高。
-这种权衡需要仔细考虑，在实际应用中需要根据具体情况来平衡检测的敏感性和误报率。
-未来的工作可以集中在寻找更有效的数据平衡方法或损失函数，以改善少数类的检测能力，同时保持模型整体的准确性。\par
+ 
+% 可以看出，本文提出的方案在完成路径重构时所需要的数据包数量要远远少于PPM-Fixed方案。
+% 当m=2时本方案略优于PPM-Dynamic方案，当m=4时则明显优于以上两种PPM类方案。另外，
+% 仔细观察图像可以发现，本文提出的方案表现出阶梯性特征，这是因为该方案采用了分组
+% 标记的方法：不管跳数d相差多少，只要$k = \lceil d/m \rceil$相同，完成路径重构所需
+% 要的数据包数量就会相同。
 
 
-综上我们可以得出结论，经过模态融合的模型在损失减少和准确率提高方面表现出显著的优势。
-模态融合策略似乎有效提高了模型的稳定性和泛化性能，这在处理实际应用中的复杂数据时尤为重要。
-通过整合残差网络和双向门控循环单元的特性，模态融合策略可能帮助模型更好地捕获数据的时间依赖性和深层特征，从而提高整体性能。
+% 在传统的PPM类方案中，完成路径重构所需的数据包数量通常指完成路由覆盖所需的数据包数量，
+% 而非直接获得一条有序攻击路径的数据包数量。要想获得一条有序的攻击路径仍需要额外的操作，
+% 例如网络探测、ISP网络地图等以确定具体的攻击路径。而在本方案中，可直接利用标记数据包
+% ，获取接口号路径。之后再依据接口号路径，依次查询路由器便可获得一条有序的攻击路径。
+
+% \begin{figure}[htbp]
+%   \centering
+%   \subcaptionbox{数据包空间开销\label{fig:packet_overhead}}[0.44\textwidth]{
+%   \includegraphics[width=0.45\textwidth]{packet_overhead.png}
+
+%   }
+%   \hspace{36pt}
+%   \subcaptionbox{数据包空间利用率\label{fig:space_utilization}}[0.44\textwidth]{
+%   \includegraphics[width=0.46\textwidth]{space_utilization.png}
+%   }
+%   \caption{数据包空间开销即利用率与组大小关系}
+% \end{figure}
+% 图~\ref*{fig:packet_overhead}~展示了本文所提方案与PPM方案在数据包标记空
+% 间开销方面的对比结果。本文所提方案进行路由标记所需的空间与组大小m成正比。当m小
+% 于4时，IGPPM产生的空间开销低于PPM。图~\ref*{fig:space_utilization}~则展示了标记空间利用率方面的对比结果。
+% 利用率是指单个数据包中标记的路由数量与数据包标记空间开销的比率。可以观察到，与
+% PPM方案相比，我们的方案具有更高的空间利用率，这显著提高了方案的路由回溯能力。
+% \section{本章小结}
+% \label{sec:otherparts}
+% 在网络通信中，由于缺乏IP地址验证机制，攻击者可以冒充其他用户，
+% 导致各种网络攻击，例如DoS/DDoS攻击，并可能引发其他损害目标主
+% 机声誉和利益的恶意活动。因此，IP地址跟踪解决方案变得至关重要。
+
+% 尽管概率包标记法作为一种能够进行路由回溯的有效方法，并且具备自动回溯的能力
+% ，但这种方法都有一定的缺点：使用IP地址作为标记信息来对单个路由器进行标记，
+% 这将导致标记空间利用率低、路径重建过程需要收集的数据包数量大，并且不能直接提供有序的攻击路径。
+
+% 因此，本文介绍了IGPPM方案，该方案利用路由器接口编号的局部
+% 唯一性及其与IP地址相比相对较小的空间要求实现了IGPPM在单
+% 个数据包上携带更多的路由器标记信息。此外，通过对异或特性
+% 的有效使用，当收集到足够的数据包以实现路径覆盖时，IGPPM可以
+% 直接提供有序的攻击路径。
+
+% 最后，本文通过理论分析和实验比较表明，与传统的PPM的方案相比，我们的方法显著减少了在路由回溯过程中达到收敛状态所需的数据包数量，提高了回溯效率。

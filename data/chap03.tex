@@ -1,291 +1,2075 @@
 %%================================================
-%% Filename: chap03.tex
+%% Filename: chap04.tex
 %% Encoding: UTF-8
 %% Author: Yuan Xiaoshuai - yxshuai@gmail.com
-%% Created: 2012-04-27 19:47
-%% Last modified: 2019-11-07 14:38
+%% Created: 2012-04-28 00:15
+%% Last modified: 2019-11-06 17:39
 %%================================================
-\chapter{基于接口号分组的概率标记法}
-\label{cha:IGPPM}
+\chapter{基于特征融合的异常流量检测模型与增量学习实现}
+% \chapter{基于多模态特征融合的增量学习方案}
+\label{cha:ResNet-BiGRU}
 
-传统的PPM（概率包标记法）通常使用路由器的IP地址作为标记信息，然而IP地
-址是相对于全球的网络设备的，占用空间大，为32 bit。故PPM通常只会携带一
-个路由器的标记信息，这导致了概率包标记法的空间利用率较低，为$1/32 = 
-0.03125$。这也是为什么传统的概率包标记法需要收集更多数据包以进行路径
-重构的原因。
+由于传统的网络攻击检测方法不能综合分析网络流量数据中的空间特征与时序特征，网络攻击检测的准确性仍有很大的提升空间。
+因此，本文设计并提出了一个基于残差网络与双向门控循环单元的多模态特征融合模型，旨在充分挖掘网络流量数据时序特征和空间特征的同时，综合分析这两个特征，进一步提高模型的准确率。
+此外，针对传统攻击检测技术在应对新型攻击时表现出的检测能力不足、难以适应攻击模式不断变化的问题，本文进一步提出了一个基于多模态特征融合的增量学习方案。
+本方案在保留模型原有知识的基础上，使其具备持续适应和学习新攻击模式的能力，进而逐步适应日新月异的攻击环境，确保安全防护的时效性和准确性。
 
-在本文中，我们将采用一种不同的方法：利用路由器的接口号作为标记信息。IP
-地址是相对于全球网络设备的，而路由器接口号仅相对于单个路由器内的所有网
-络接口，所以对单个路由器内的每个接口进行编码将消耗更少的空间。这意味着
-我们可以在一个数据包中标记多个路由器的信息，提高了标记空间的利用率，从
-而提高了路径重构的效率，减少了需要收集的数据包数量。这将显著改善数据包
-标记法进行IP回溯的性能和有效性。
+\section{方案概述}
+图~\ref{fig:attack_detecion_model}~描述了本文方案的工作原理和流程。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width = 0.8\textwidth]{chapter_4.drawio.png}
+  \caption{基于多模态特征融合的增量学习方案原理及流程}
+  \label{fig:attack_detecion_model}
+\end{figure}
+基于多模态特征融合的增量学习方案由以下四个关键部分构成：首先是RNB-MF模型的结构设计，其次是数据集的预处理流程，再次是记忆集的抽样优化方法，最后是RNB-MF模型的增量学习策略。
+首先，第一部分是本文接下来将要提出的基于残差网络与双向门控循环单元的多模态特征融合模型，该模型能够综合分析流量数据集的时空特征，在攻击检测准确率方法具有很好的表现。
+第二部分使模型能够顺利地在经过处理的数据集上进行学习。
+第三部分基于遗传算法实现记忆集分层抽样优化，使得模型在固定大小的记忆集最大化准确性。
+最后一部分则实现RNB-MF模型对新数据的增量学习、终身学习。
 
-\section{标记字段数据结构}
+\section{基于残差网络与双向门控循环单元的多模态特征融合模型设计}
+% 网络通信涉及复杂的交互模式，包括客户端与服务器之间的请求响应、数据传输过程中的拥塞控制等。
+% 这些交互在空间上体现为数据包的具体内容，如源IP地址、目标IP地址、端口号、协议类型等，这些信息在数据包的特定位置以特定格式存在，形成了数据的“空间”结构。
+% 在时间上则表现为交互的顺序和持续时间。\par
+该模型的原理是通过多模态特征融合技术将ResNet以及BiGRU进行融合，从而综合分析网络流量数据中的时空特性，提升决策性能。
+其具体流程为，首先，ResNet提取网络流量数据中的深层次空间特征，BiGRU则捕捉流量数据时序特征的前后依赖关系。
+接着，结合这两个特征形成混合的“时空特征”。
+最后，综合ResNet和BiGRU的决策输出以及“时空特征”，结合三者，产生最终的决策输出。
+\subsection{多模态特征融合设计}
+多模态特征融合是一种将来自不同来源或类型（模态）的数据集成在一起的过程，目的是改善决策过程、预测准确性或数据解释能力。
+这些不同模态的数据可能包括文本、图像、视频、音频和传感器数据等。
+在机器学习和深度学习领域，多模态特征融合已成为一个重要的研究领域，尤其是在需要综合处理不同类型数据的应用中，如自然语言处理、计算机视觉、语音识别和人机交互等。
+融合策略通常可以分为早期融合、晚期融合、混合融合三种类型。\par
 
-图~\ref{fig:data_structure}~展示了本方案标记空间所采用的抽象数据结构。标记空间具体来自于数据包头部字段，在实际应用时可以依照图2中的IP头部字段来构建此标记空间。在本方案中，我们利用数据包头部中的 b bit来标记数据包经过的路由器来源接口号。每个数据包携带了 m 个接口号标记字段以及两个 XOR (异或)字段，每个 XOR 字段也占据 b bit。最后，还有一个 1 位的允许标志位。总的标记空间大小为 $l = 1 + (m + 2) \times b$ bit，用于支持数据包标记过程。
+早期融合(如图~\ref{fig:MultimodalFusio} (a)~所示)，也被称为特征级融合，其核心思想是在模型的某个中间层将不同模态的特征进行集成。
+这种策略充分利用了深度学习模型在捕捉和利用模态间交互作用方面的能力。\par
+
+晚期融合(如图~\ref{fig:MultimodalFusio} (b)~所示)则采取了另一种思路。
+在这种策略中，每个模态都单独处理并产生决策或预测，而最终的融合发生在决策或预测层面，通常通过投票、平均或学习得到的加权组合来实现。
+晚期融合的优点在于能够保持模态间的独立性，适用于模态间关联较弱的情况。\par
+
+混合融合(如图~\ref{fig:MultimodalFusio} (c)~所示)策略则更为灵活，它结合了早期融合和晚期融合的优点，旨在在特征提取和决策过程中充分利用各种融合方法的优势。
+例如，一个混合融合框架可能同时利用早期融合来捕捉模态间的直接联系，同时借助晚期融合来维持某些模态的独立性。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width = 0.8\textwidth]{MultimodalFusion.drawio.png}
+  \caption{3种多模态特征融合方法\cite{hejunandzhangcaiqing}}
+  \label{fig:MultimodalFusio}
+\end{figure}
+
+早期融合的效果很大程度上依赖于对模态特性的理解和模型结构的设计，可能不适用于所有类型的多模态数据。
+由于每个模态独立处理，晚期融合可能无法捕获模态之间的深层次相互作用。
+而且晚期融合通常在决策层面进行，限制了对不同模态特征之间更细粒度关系的探索。
+而混合融合能够通过结合早期、晚期融合的优点，提供了更大的灵活性来设计模型。
+这使得混合融合能够更好地适应不同模态之间的复杂关系和动态变化。
+通过在不同的层级和阶段整合信息，混合融合能够最大化地利用不同模态之间的信息，包括直接的特征信息和深层次的相互作用信息。\par
+
+早期融合的效果在很大程度上取决于对模态特性的理解和模型结构设计。
+然而，由于不同模态数据的多样性和复杂性，早期融合可能并不总是适用于所有类型的多模态数据。
+在某些情况下，不恰当的融合方式可能会导致信息丢失或模型性能下降。
+晚期融合虽然能够保持模态之间的独立性，但由于每个模态是独立处理的，它可能无法充分捕获模态之间的深层次相互作用。
+此外，晚期融合通常在决策层面进行，这在一定程度上限制了对不同模态特征之间更细粒度关系的探索和利用。
+相比之下，混合融合策略通过结合早期融合和晚期融合的优点，为模型设计提供了更大的灵活性和适应性。
+它能够在不同的层级和阶段整合不同模态的信息，从而最大化地利用不同模态之间的互补性和关联性。这种策略不仅能够捕获模态之间的直接特征信息，还能够挖掘深层次的相互作用信息，进一步提升模型的性能。\par
+
+
+
+因此，本文将会利用混合融合策略来整合ResNet和BiGRU模型的优势。
+首先，我们将分别利用ResNet和BiGRU来从网络流量数据集中提取空间特征和时序特征。ResNet的强大之处在于其深度结构和残差连接，使其能够捕捉到网络流量数据中的复杂空间模式；而BiGRU则通过其双向结构，有效地捕获了时序数据中的长期依赖关系。
+接着，为了高效且有效地融合这两种特征，我们采用联合架构。
+联合架构提供了两种融合方法，即“加”联合方法和“乘”联合方法。
+“加”联合方法，也称为加法融合，是一种直观且计算效率高的方式。它通过对不同模态的特征向量进行加权和或简单的相加操作来融合特征。
+这种方法基于一个假设，即不同模态的特征贡献可以直接相加，从而形成一个综合的特征表示。
+加法融合不仅易于实现，而且能够保留原始特征中的大部分信息，同时减少了计算复杂度。
+加法融合可以表示为：
+\begin{equation}
+  z = f(w_1^Tv_1 + w_2^Tv_2+ \dots + w_n^Tv_n)
+\end{equation}
+\begin{flushleft}
+  \renewcommand\arraystretch{1.25}
+  \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
+  式中& $\symbf{z}$ &共享语义子空间的输出结果；\\
+  &  $\symbf{N}$&类别总数；\\
+  &  $\symbf{v}$ &各模态的输入；\\
+  &  $\symbf{w}$ & 权重，下标表示不同的模态，通过映射$f$将所有子模态语义转换到共享子空间。\\
+  \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
+  \end{flushleft}
+
+
+  "乘"联合方法，或乘法融合，涉及到对不同模态的特征进行乘积操作。
+  这种方法基于这样的假设：一个模态的特征可以通过与另一模态的特征进行乘积来增强或抑制重要的信号。
+  乘法联合可以用以下公式表示：
+\begin{equation}
+  z = \begin{bmatrix}v^1 \\1\\\end{bmatrix} \otimes \begin{bmatrix}v^2 \\1\\\end{bmatrix} \otimes \dots \otimes \begin{bmatrix}v^n \\1\\\end{bmatrix}
+\end{equation}  
+\begin{flushleft}
+  \renewcommand\arraystretch{1.25}
+  \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
+  式中& $\symbf{z}$ &融合张量后的结果输出；\\
+  &  $\symbf{v}$&不同的模态；\\
+  &  $\symbf{\otimes}$ &外积算子。\\
+   \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
+\end{flushleft}
+
+
+
+尽管“加”联合方法具有简单性和易实现性的优势，但它可能因特征向量语义组合的局限性而导致后期语义信息的丢失，进而影响模型性能。
+相对而言，“乘”联合方法通过张量计算的方式，能够更加深入地融合特征语义，弥补“加”联合方法的不足\cite{hejunandzhangcaiqing}。
+因此，为了更全面地融合ResNet和BiGRU提取的空间与时序特征，本文将采用“乘”联合方法来进行特征融合。
+这种方法能够确保特征语义在融合过程中得到充分保留和增强，从而有望提高模型的准确性和鲁棒性。\par
+
+最终，本文所构建的融合架构如图~\ref{fig:ResNet-BiGRU-Fusion}~所示。
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width = 0.8\textwidth]{data_structure}
-  \caption{方案所采用的数据结构}
-  \label{fig:data_structure}
-\end{figure} 
+  \includegraphics[width = 0.8\textwidth]{ResNet-BiGRU-Fusion.drawio.png}
+  \caption{ResNet-BiGRU特征融合设计}
+  \label{fig:ResNet-BiGRU-Fusion}
+\end{figure}
+该架构充分利用了混合融合策略的优势，通过结合ResNet和BiGRU的特征提取能力，并采用“乘”联合方法进行特征融合，为网络流量分析等相关任务提供了强大的支持。
 
-具体的数值 b 和 m 可以根据实际应用场景来确定。在本文的运行示例中，我
-们选择了 b = 6，这是因为大多数互联网路由器的接口数量远远少于 $2^6 =
-64$个。同时，我们选择了 m 分别为 2 和 4，总共使用了 IP 头部中的 25
-和 37 bit。这导致了标记空间的利用率分别为 0.08 和 0.0108。相较于
-使用 IP 地址进行标记的标记空间，利用率提高了约 2.56 和 3.46 倍。
-% 插入外部代码
-% \lstinputlisting[firstline=8,style=lstStyleLaTeX]{main.tex}
+\subsection{模型网络结构设计}
+本文的融合模型主要由一个残差网络以及一个双向门控循环单元网络以及它们之间的多模态特征融合方式构成。
+其中，残差模型主要包括两种类型的残差块：conv\_block（卷积残差块）和identity\_block（恒等残差块）。
+这两种块的设计旨在解决深度神经网络训练中常见的梯度消失问题，从而使网络能够在增加深度的同时保持训练的有效性和稳定性。
+conv\_block负责调整输入特征图的维度，以匹配块输出时的维度变化。
+它通过在残差路径中引入具有步长的卷积操作来实现降维，并通过额外的卷积层来调整通道数，从而使得主路径上的特征图尺寸与残差路径上的输出能够相匹配。
+这种设计使得网络能够在增加深度的同时，适应更高层的特征表示。
+identity\_block则在不需要改变输入特征图维度时使用，主要用于网络的深层部分，用以加深网络深度提高模型的性能。\par
 
-\section{路由器标记阶段算法}
+残差模型以15x15\footnote{经过特征编码阶段后，数据的维度变为了(214,1),为了能够进行2D卷积操作，本文将数据的形状调整为(15,15,1),并进行了零填充。}的二维输入数据开始，紧接着是一个初始卷积层，该层使用64个3x3大小的滤波器，并应用’same’填充，以保持输出特征图的尺寸。
+此外，这一层使用L2正则化以防止过拟合，并通过批归一化（BatchNormalization）和ReLU激活函数对特征进行标准化和非线性化处理。
 
-在本文的数据包标记法部分，算法~\ref{alg:packet_marking}~提供了详细
-的内容，用于中间路由器对数据包进行标记，同时，图
-~\ref*{fig:marking_procedure}~抽象地描述了这一过程。这一过程包括以
-下关键步骤：
+接下来，模型通过两个阶段的残差块处理特征：
 
-\input{pseudocode/marking.tex}
+\begin{itemize}
+  \item 第一阶段包含一个conv\_block和一个identity\_block，分别用于特征图的尺寸和深度调整以及模型深度的增加。
+  \item 第二阶段则起始于另一个conv\_block，随后是两个identity\_block，以进一步增强模型的特征提取能力。
+\end{itemize}
+每个卷积层都配备了L2正则化，且所有残差块后都跟随批归一化和ReLU激活函数，以促进有效训练并避免梯度问题。
 
-\begin{enumerate}[label=(\alph*).]
-  \item \emph{计算路由器位序：}首先，算法需要确定当前路由器是数据包
-  所经过路径中的第几个路由器，即当前路由器在数据包需要经过的所有路由
-  器的位序。数据包的TTL字段的初始值通常因发送方的系统而异，但通常位于
-  范围{32，64，128，255}内。为实现这一步骤，算法首先读取数据包中的
-  TTL字段，然后从这组初始值中找到能够不小于数据包TTL的值。然后，计算
-  这个最小初始值与数据包中的TTL字段之间的差值，这个差值表示了数据包从
-  发送者发送后到达当前路由器时所经过的路由器跳数，即当前路由器在整个
-  路径中的位序。
-  \item \emph{计算组中序号：}接下来，算法将使用此位序和预定义的组大
-  小参数 m（在伪代码中为\emph{group\_size}变量）进行取模运算，得到
-  模数。本方案利用路由器在数据包从发送者到受害者的整条路径上的顺序，
-  对路由器进行分组。因此，所得的模数表示路由器在组中的序号，范围从0到
-  m-1。
-  \item \emph{区分路由器类型：}根据功能性需求，路由器可以分为两类：
-  组中的0号路由器和非0号路由器。
-  \begin{enumerate}
-    \item[i.] 对于组中的0号路由器，还需要确定是否是路径中首个路由器。
-    如果是首个路由器，便以1概率执行标记操作：将数据包的接口标记字段
-    \emph{interface\_0}到\emph{interface\_(m-1)}全部设置为空，即
-    未标记状态；将数据包在此路由器中的来源接口号写入到相应的接口标记字
-    段；取出XOR1字段中的值与来源接口号进行异或操作，并将结果重新写入到
-    XOR1字段；将数据包中的允许标记字段设置为True。如果路由器非首组的0
-    号路由器，那么它会根据允许标记字段来决定是否以p概率执行标记操作。若
-    标记，操作与前述标记操作相同；若不标记，该路由器会将允许标记字段设置
-    为False。这确保了数据包只有经过本组路由器标记后，后面的其它组才有可
-    能进行标记。
-    \item[ii.] 对于组中非0号路由器，只要数据包中对应的标记字段为空，
-    便会对其进行标记：将来源接口号写入到数据包相应的接口标记字段；取
-    出XOR1字段中的值与来源接口号进行异或操作，并将结果写入到XOR1字段。
-  \end{enumerate}
-  \item \emph{更新数据包信息：}最后的步骤适用于所有中间路由器，无论
-  是否为组中的0号路由器。具体为将来源接口号与XOR2字段值进行异或运算，
-  并将结果重新写入到XOR2字段。这样，XOR2字段结合TTL字段便可作为每条
-  路径的地址。在路径重构过程中，以此即可实现对数据包按路径进行分类。
-\end{enumerate}
+在经过残差块序列处理后，模型使用平均池化层（AveragePooling2D）来减小特征图的尺寸，随后是一个Dropout层，以0.5的比率随机断开输入单元，降低过拟合的风险。
+最后，模型将处理后的特征展平，为与BiGRU的时序特征融合做准备。
 
+
+\begin{table}[htbp]
+  \label{tab:resnet_description}
+  \caption{The architecture of our simplified ResNet model}
+  \centering
+  \begin{tabular}{c|c|c}
+    \hline
+  Layer name & Output size & ResNet-BiGRU \\
+  \hline
+  conv1 & $15 \times 15$ & $3\times3$, 64, stride 1 \\
+  \hline
+  % 使用multirow和mbox命令来确保矩阵居中
+  \multirow{4}{*}{conv2\_x} & \multirow{4}{*}{\centering $8 \times 8$} &
+  \multirow{4}{*}{$\left[\begin{array}{c}
+      1 \times 1, 64 \\
+      3 \times 3, 64 \\
+      1 \times 1, 256 
+  \end{array}\right] \times 2$ , stride 2} \\
+  &&\\
+  &&\\
+  &&\\
+  \hline
+  \multirow{4}{*}{conv3\_x} & \multirow{4}{*}{\centering $8 \times 8$} &
+  \multirow{4}{*}{$\left[\begin{array}{c}
+    1 \times 1, 64 \\
+    3 \times 3, 64 \\
+    1 \times 1, 256 
+  \end{array}\right] \times 2$, stride 1} \\
+  &&\\
+  &&\\
+  &&\\
+  \hline
+  avg\_pool & $1 \times 1$ & AvgPool $2 \times 2$ \\
+  \hline
+  flatten &1,1264&  \\
+  \hline
+  dropout & & Dropout(0.5) \\
+  \hline
+  \end{tabular}
+\end{table}
+
+
+对于BiGRU模型，第一层包含64个单元，用于捕捉序列数据的时序依赖关系，并保留每个时间步的输出。这一设计旨在充分提取序列中的动态特征。
+为了降低模型过拟合的风险，我们在第一层BiGRU后引入了一个10\%的dropout层，通过随机丢弃部分特征连接来增强模型的泛化能力。
+随后，数据进入第二个BiGRU层，该层拥有32个单元，专注于捕捉更深层次的时序信息。与第一层不同，这一层仅输出最后一个时间步的结果，以捕捉序列的整体趋势。
+随后是另一个10\%的dropout层，以进一步减少过拟合。
+值得注意的是，为了将BiGRU层的特征输出与ResNet模型的特征进行合并，在这个结构中也同样并没有加入全连接层（Dense layer）作为输出。\par
+
+
+最终，我们从ResNet模型和BiGRU模型中分别提取特征，并通过特定的融合策略进行合并。
+此外，为了与BiGRU的输出维度相匹配，我们将ResNet的输出从11264维通过适当的映射降维至64维。
+随后，采用元素乘法操作将两种模型的特征进行融合，确保不同模态的信息能够相互补充。
+在特征融合后，我们将ResNet和BiGRU的决策输出与融合特征合并成一个统一的张量。这一张量随后通过一个额外的Dense层进行进一步处理，最终输出分类决策。
+通过这一设计，我们能够充分利用ResNet和BiGRU各自的优势，并通过混合融合策略实现多模态特征的有效整合。
+
+图~\ref{fig:hyber_model_struct}~是这个混合模型的整体架构，表~\ref{tab:model_params}~是混合模型的参数数量，以便于理解本文模型的架构。
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width = 0.8\textwidth]{marking_procedure.png}
-  \caption{算法~\ref{alg:packet_marking}~流程图}
-  \label{fig:marking_procedure}
-\end{figure}   
-
-\section{路径重组阶段算法}
-一旦受害者服务器在检测到攻击后，便会开始收集攻击数据包。当收集到的数
-据包数量达到一定阈值时，受害者服务器就会进入收敛状态。在这个状态下，服
-务器会利用其中带有标记的攻击数据包来进行路径重构。算法
-~\ref{alg:path_reconstruction}~提供了受害者服务器如何在这个过程中
-利用标记数据包进行路径重构的详细内容。路径重构的流程为:
-
-\input{pseudocode/path_reconstruction.tex}
-
-\begin{enumerate}[label=(\alph*).]
-  \item \emph{划分攻击数据包结合S：}首先，将攻击数据包集合 $S$ 根据
-  数据包的 XOR2 字段和 TTL 字段的不同值划分为不同的子集 $U_i$ ，并
-  将这些子集全部添加到集合 $S'$ 中。
-  \item \emph{根数据包集合的收集与干扰数据包排除：}接下来，对 $S'$ 
-  中的每个子集$U_i$进行遍历，从每个子集$U_i$中收集根数据包并添加到根
-  数据包集合 $T$ 中，并将这些根数据包以及可能的干扰数据包从子集 
-  $S_i'$ 中剔除。
-  \item \emph{获取接口号路径：}针对步骤(b)所得到的根数据包集合 
-  $T$，利用这些根数据包以及相应的子集$U_i$，调用算法
-  ~\ref*{alg:try_construct}~进行路径重构，从而得到路由器接口号的路
-  径。
-  \item \emph{获取攻击路径：}利用步骤(c)所得到接口号路径逐个查询路
-  由器最终获得路径上的所有路由器。
-\end{enumerate}
-
-步骤(a)，由于来自同一节点且走过相同路径的数据包的 TTL 值必定相同，同
-时数据包中的 XOR2 字段包含了从攻击者到受害者服务器的整条路径上的所有
-路由器的接口号的异或值，因此，首先结合数据包中的 XOR2 字段和 TTL 字
-段将攻击数据包集合分成不同的子集。
-
-对于步骤 (b) 和步骤 (c) ，由于在我们的算法中，XOR1字段只会在路由器进
-行标记时才重新计算并写入，如果不进行标记，那么 XOR1字段将与路由器接口
-字段保持不变。改变的只有 XOR2 字段，因为 XOR2字段反映了整个数据包所
-经过的路径，而 XOR1 字段只记录了已标记的路由器。我们的方案具有这样的
-特性，假设攻击数据包在经过$ R_1 \dots R_i \dots R_d $ 后到达受害者
-($ i \in [1,d] $表示距离发送者的路由器跳数)，$ \{R_{x_1} \dots 
-R_{x_n}\}$($n \in [2,d]$)依次对其进行了标记，对应$ XOR1 = R_{x_1}
- \oplus \dots \oplus R_{x_n}$，那么有$x_j - x_{j-1} = 1,j \in 
- [2,n]$。因此，我们可以使用 XOR1 字段作为线索来按序获取整条路径上的
- 所有路由器接口号，这些按顺序排列的路由器接口号序列即可表示它们所走过
- 的完整路径，我们将这些由有序的路由器接口号序列所表示的路径称为接口号
- 路径。获取接口号路径的具体方法是首先找到 XOR1=XOR2 的数据包，这些数
- 据包记录了到达受害者的最后一跳路由器接口号，可以看作线索的头部。在本
- 文中，我们将这些数据包称为根数据包。因此，步骤 (b) 的任务是从每个子
- 集中提取出根数据包集合T，并在步骤 (c) 中使用算法
- ~\ref*{alg:try_construct}~来获取路由器接口号路径。
-
-步骤(d)，将利用这些接口号路径来获取实际的攻击路径。具体方法是，受害者
-服务器首先从自己的网关路由器开始，递归查询路由器接口号对应的上游路由
-器，直到查询完所有路由器接口号对应的路由器节点，从而获得路由器节点路
-径，也就是攻击路径。
-
-\section{Try Construct Procedure算法}
-
-接下来我们将会详细介绍算法~\ref*{alg:try_construct}~的内容。
+  \includegraphics[width = \textwidth]{hyber_model_struction.drawio.png}
+  \caption{混合模型整体结构}
+  \label{fig:hyber_model_struct}
+\end{figure}
 
 
 
-\begin{enumerate}[label=(\alph*).]
-  \item 将base\_packet中的所有接口号逆序添加到当前尝试构建的接口路
+\begin{table}[htbp]
+  \caption{混合模型参数数量}
+  \label{tab:model_params}
+  \centering
+  \begin{tabular}{ccc}
+    \toprule
+    \textbf{总参数} & \textbf{可训练参数数量} & \textbf{非可训练参数数量}\\
+    \midrule
+    1,417,510 & 1,412,518 & 4,992\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+\section{数据预处理}
+数据预处理是深度学习及机器学习中的关键环节，它对于构建一个干净、标准化且均衡的数据集至关重要。
+预处理的主要目标是为后续的特征学习和模型训练奠定坚实的基础。
+通过实施恰当的数据预处理策略，我们能够显著提升模型的性能、加速训练过程，并增强模型对未见数据的泛化能力。\par
+
+以下是本文的数据预处理步骤：首先，我们对训练集和测试集进行特征编码，以确保分类数据能够被模型有效处理；
+随后，我们针对原始数据集及编码过程中可能出现的缺失值进行了详尽的处理，以确保数据的完整性和准确性；
+鉴于本文所使用的数据集存在显著的类别不平衡问题，我们还将对少数类样本进行过采样处理。
+这一策略旨在平衡训练过程中的类别表示，从而提升模型对少数类的识别能力。
+通过这一系列预处理步骤，我们有望构建一个更加优质的数据集，为后续的模型训练提供有力支持。\par
+
+图~\ref{fig:dataprocess}~概括性地展示了整个数据预处理流程。
+本节接下来的部分将对这一流程中的关键步骤进行详细阐述，以便于读者深入理解本文采取的方法及其背后的逻辑。
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width = 0.8\textwidth]{dataprocess.drawio.png}
+  \caption{数据集预处理流程图}
+  \label{fig:dataprocess}
+\end{figure}
+
+\subsection{特征编码}
+
+特征编码是数据预处理中不可或缺的一环，旨在将原始数据转化为模型能够识别和处理的数值格式。
+这个过程对于提高模型的性能和准确性至关重要，因为大多数模型的预期输入数据为数值型，而原始数据往往包括各种类型，如文本、日期或分类数据。
+特征编码目的便是将非数值特征转换为数值形式，使模型能够对这些数据进行计算。
+在我们的流量数据集中，同样存在大量非数值类型的特征，如IP地址、协议类型等。
+为了充分利用这些数据并构建有效的模型，我们需要对这些非数值特征进行特征编码，将其转换为数值类型。\par
+
+One-Hot 编码是一种特殊且广泛使用的特征编码方法，它易于理解和实现，非常适用于处理具有有限类别的分类数据。
+鉴于其直观性和实施简便性，本文决定采用One-Hot 编码方式，针对数据集中的非数值类型特征进行转换。
+该方法的工作原理是为每个类别创建一个独立的二进制列，这样每个数据点在其所属类别的对应列上被标记为1，而在其他所有列上则被标记为0。
+通过这种方式，我们能够有效地将非数值类型特征转换为机器学习算法易于处理的数值形式，从而提升模型的性能。
+表~\ref{tab:onehot}~是本文采用one-hot编码对数据集进行特征编码的具体算法。\par
+\begin{table}[htbp]
+  \caption{One-hot编码算法实现}
+  \label{tab:onehot}
+  \centering
+  \begin{tabularx}{1.0\textwidth}{cl}
+  \toprule
+  \multicolumn{2}{l}{\textbf{one-hot编码算法}}\\
+  \midrule
+  \multicolumn{2}{l}{\textbf{输入}: 数据集 $D$，其中包含数值型和分类型列} \\ 
+  \multicolumn{2}{l}{\textbf{输出}: 经过One-hot编码的数据集 $D'$} \\
+  1& 初始化一个空的数据集 $D'$ \\
+  2& \textbf{for} 每一列 $col$ \textbf{in} $D$: \\
+  3&\quad \textbf{if} $col$ 是分类型: \\
+  4&\quad\quad $unique\_values$ = 获取 $col$ 的所有唯一值 \\
+  5&\quad\quad \textbf{for} 每一个值 $val$ \textbf{in} $unique\_values$: \\
+  6&\quad\quad\quad 创建一个新列 $new\_col$，名称为 ``$col\_val$''\\
+  7&\quad\quad\quad \textbf{for} 每一行 $row$ \textbf{in} $D$: \\
+  8&\quad\quad\quad\quad \textbf{if} $row[col] == val$: \\
+  9&\quad\quad\quad\quad\quad 在 $D'[new\_col]$ 中填充 1 \\
+  10&\quad\quad\quad\quad \textbf{else}: \\
+  11&\quad\quad\quad\quad\quad 在 $D'[new\_col]$ 中填充 0 \\
+  12&\quad \textbf{else}: \\
+  13&\quad\quad 将 $col$ 直接复制到 $D'$ 中 \\
+  14&\textbf{return} $D'$ \\ 
+  \bottomrule
+  \end{tabularx}
+  \end{table}
+
+在处理IP地址时，直接进行One-Hot编码会破坏其内在特征并导致维度爆炸，影响模型性能。
+常见的处理方法包括字段分割、整数转换、地理定位和嵌入法。字段分割法将IPv4地址拆分为四个数值特征，保留模式识别能力。
+整数转换法将IP转为32位整数（IPv6为更大整数），保持层次结构，适合数值特征处理。
+地理定位将IP映射到地理特征，如国家、城市，利用外部服务获取，适用于地域分析。
+嵌入法通过深度学习将IP转换为向量，捕获地址间相似性，但计算成本高。
+考虑到整数法可能引起特征不平衡，地理定位操作复杂，嵌入法计算代价大，本文采用字段分割法简化处理流程。
+
+\subsection{数据集平衡处理}
+在大规模数据集预处理中，解决数据不平衡问题是提高模型性能和泛化能力的关键步骤。
+由于本文采用的数据集是非常不均衡的，因此本文将会对数据集进行平衡处理。
+数据不平衡通常通过欠采样和过采样两种重采样策略来处理。
+欠采样通过减少多数类样本来达到平衡，虽然助于增强模型对少数类的关注，但会造成信息丢失。
+相反，过采样则通过增加少数类样本数量来平衡数据，例如可以采用复制样本或利用SMOTE等高级技术生成新样本，提高少数类的代表性。
+在样本量不足时，过采样尤为适用，鉴于此，本文将会利用SMOTE算法对数据集进行平衡处理。\par
+
+
+SMOTE（Synthetic Minority Over-sampling Technique，合成少数类过采样技术）是一种被广泛采用的过采样策略，旨在通过合成新的少数类样本而非简单重复现有样本来增强数据集的类别平衡。
+此技术显著提升了分类器对少数类的识别能力，进而改善了模型的整体性能及其泛化能力。
+SMOTE算法的核心优势在于其能够通过引入合成样本增加数据集的多样性，促进模型学习更复杂的决策边界\cite{chawla2002smote}\cite{fernandez2018smote}。
+表~\ref{tab:smote}~是该技术的算法实现。
+\begin{table}[htbp]
+  \caption{SMOTE算法实现}
+  \label{tab:smote}
+  \centering
+  \begin{tabularx}{1.0\textwidth}{cl}
+  \toprule
+  \multicolumn{2}{l}{\textbf{SMOTE算法}}\\
+  \midrule
+  \multicolumn{2}{l}{\textbf{输入}: 少数类样本集 $S$，采样倍率 $N$，最近邻数 $k$} \\ 
+  \multicolumn{2}{l}{\textbf{输出}: 合成样本集 $S'$} \\
+  1& 如果 $N$ 不是整数，则将 $N$ 向下取整，同时调整最终的样本数量 \\
+  2& 初始化空的合成样本集 $S'$ \\
+  3& \textbf{for} 每一个样本 $s$ \textbf{in} $S$: \\
+  4&\quad 找到 $s$ 的 $k$ 个最近邻 \\
+  5&\quad \textbf{for} $i$ \textbf{from} 1 \textbf{to} $N$: \\
+  6&\quad\quad 随机选择一个最近邻 $nn$ \\
+  7&\quad\quad \textbf{for} 每个特征 $f$: \\
+  8&\quad\quad\quad 计算 $s$ 和 $nn$ 在特征 $f$ 上的差值 $\Delta f$ \\
+  9&\quad\quad\quad 生成新值 $new\_f = s[f] + \Delta f \times \text{随机数}(0, 1)$ \\
+  10&\quad\quad 创建新样本 $new\_s$，其特征值为所有生成的 $new\_f$ \\
+  11&\quad\quad 将 $new\_s$ 添加到合成样本集 $S'$ \\
+  12&\textbf{return} $S'$ \\ 
+  \bottomrule
+  \end{tabularx}
+\end{table}
+\section{基于残差神经网络与双向门控循环单元多模态特征融合模型实验评估}
+\subsection{实验数据集介绍}
+UNSW-NB15数据集\cite{moustafa2015comprehensive}由澳大利亚新南威尔士大学的网络安全实验室开发，旨在克服以往数据集的不足并提供更实际的测试环境。
+与早期的KDD Cup 99和NSL-KDD数据集相比，UNSW-NB15引入了一系列的改进和特色，以适应网络威胁检测的新要求。
+这些改进体现在数据集的构成、攻击类型的多样性以及数据的实用性和代表性上。
+
+\begin{table}[htbp]
+  \caption{UNSW-NB15流量分布及其描述}
+  \label{tab:UNSW-NB15_distribution}
+  \begin{tabularx}{\textwidth}{@{}cccX@{}}
+    \toprule
+      \multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{占比（\%）}} & \multicolumn{1}{c}{\textbf{描述}}\\
+    \midrule
+  Normal & 2218761 & 87.35\% & 正常数据 \\
+
+  Fuzzers & 24246 & 0.95\% & 通过向程序或网络输入随机数据尝试使其悬挂或暂停的攻击 \\
+
+  Analysis & 2677 & 0.11\% & 包含不同的端口扫描、垃圾邮件和html文件渗透攻击 \\
+
+  Backdoors & 2329 & 0.09\% & 一种秘密绕过系统安全机制以访问计算机或其数据的技术 \\
+
+  DoS & 16353 & 0.64\% & 恶意尝试使服务器或网络资源对用户不可用，通常通过暂时中断或悬挂连接到互联网的主机的服务来实现 \\
+
+  Exploits & 44525 & 1.75\% & 攻击者了解操作系统或软件内的安全问题，并利用这一点通过利用漏洞进行攻击 \\
+
+  Generic & 215481 & 8.48\% & 一种针对所有给定块大小和密钥大小的分组密码的技术，不考虑分组密码的结构 \\
+
+  Reconnaissance & 13987 & 0.55\% & 包含所有可以模拟收集信息攻击的攻击 \\
+
+  Shellcode & 1511 & 0.06\% & 利用软件漏洞进行攻击的载荷中的一小段代码 \\
+
+  Worms & 174 & 0.01\% & 攻击者复制自身以便传播到其他计算机，通常使用计算机网络传播，依赖于目标计算机上的安全漏洞进行传播 \\
+  \bottomrule
+  \end{tabularx}
+  \end{table}
+
+首先，UNSW-NB15数据集通过包含更现代的攻击类型，如DoS、蠕虫、后门攻击和Fuzzers等（关于具体的攻击种类详见表~\ref{tab:UNSW-NB15_class}~，数据集类别占比详见表~\ref{tab:UNSW-NB15_distribution}~和图~\ref{fig:UNSW-NB15barchart}~）。
+这种多样化的攻击样本集合使得数据集不仅能够用于传统的入侵检测研究，也适用于评估面对新型攻击行为的检测系统的效果。
+
   
-  径current\_interface\_path中，
-        并重新计算算法中的xor1变量、添加的接口号个数append\_num、该路径剩余的接口号个数remaining\_ipath\_legth。
-  \item 若remaining\_ipath\_legth = 0，执行步骤(c)，否则执行步骤(f)。
-  \item 若xor1此时为空值执行步骤(d)，否则执行步骤(e)。
-  \item 将当前尝试构建的接口号路径current\_interface\_path添加到接口号路径结果集合result\_interface\_path中，再将current\_interface\_path置为空后返回构建结果True。
-  \item 从当前尝试构建的接口号路径current\_interface\_path中去掉刚添加的append\_num个接口号，返回构建结果False。
-  \item 遍历集合U，从U中根据xor1变量的值收集下一个所有可能的标记数据包base\_packet，并将它们添加到集合packets中。遍历完U后，若集合packets的长度为0执行步骤(g)，否则执行步骤(h)。
-  \item 从当前尝试构建的接口号路径current\_interface\_path中去掉刚添加的append\_num个接口号，返回构建结果False。
-  \item 遍历packets集合中的每个packet，从集合U中去掉packet，将packet作为新的base\_packet递归调用本过程开始下一轮尝试构建，并取得尝试构建的结果。若构建成功，向上层调用返回结果True，否则再将本次递归调用使用的packet添加到U中,继续遍历，直到遍历完packets集合中所有的packet。
-  \item 从当前尝试构建的接口路径current\_interface\_path中去掉刚添加的append\_num个接口号，向上层调用返回构建结果False。
-\end{enumerate}
+  \begin{figure}[htbp]
+    \centering
+    \includegraphics[width = 0.8\textwidth]{UNSW-NB15barchart.png}
+    \caption{UNSW-NB15数据集分布占比饼状图}
+    \label{fig:UNSW-NB15barchart}
+    \end{figure}
 
 
-在算法~\ref*{alg:try_construct}~中我们使用xor1变量作为依次找到包含相关路由信息的数据包线索。而变量append\_num则用于记录每次构建过程中向current\_interface\_path添加的接口号数量，这在构建失败时可以用来恢复current\_interface\_path到之前的状态。remaining\_ipath\_length 控制了current\_interface\_path的长度，当remaining\_ipath\_length为0时，将不能再向current\_interface\_path添加接口号。此时有两种可能结果：构建成功或构建失败。如果xor1为0，可能构建成功；否则必定失败。如果remaining\_ipath\_length不为0，表示路径仍未完整，需要继续利用xor1作为线索，逐一尝试构建数据包，直到构建成功或失败，下面是算法3.3的相关伪代码。
+其次，UNSW-NB15提供了四个CSV格式的数据记录文件，每个文件中都包含了攻击记录和正常记录。这些CSV文件分别命名为UNSWNB15\_1.csv、UNSW-NB15\_2.csv、UNSW NB15\_3.csv和UNSW-NB15\_4.csv。
+在每个CSV文件中，所有记录都根据最后一个时间属性进行了排序。前三个CSV文件中，每个文件包含700,000条记录；第四个文件包含440,044条记录，共2,540,044条记录。
 
-\input{pseudocode/TRY_CONSTRUCT.tex}
 
-为了更容易理解这一过程，图~\ref*{fig:try_construct}~表示了算法~\ref*{alg:try_construct}~的流程图。
+海量的数据集不仅有助于模型的训练和验证，也提高了入侵检测模型在实际环境中应用的可信度和有效性。
+此外，UNSW-NB15数据集在设计时注重了实用性和代表性，通过模拟现实世界的网络环境和流量模式，确保了数据集的广泛适用性和长期价值。
+这使得该数据集成为评估和比较不同入侵检测技术性能的理想选择。
+\begin{table}[htbp]
+  \caption{UNSW-NB15数据集中每种攻击的不同子类的细分}
+  \label{tab:UNSW-NB15_class}
+  \begin{tabularx}{\textwidth}{@{}ccX@{}}
+  \toprule
+    \multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{子类}}\\
+  \midrule
+    Fuzzers & 10 & FTP, HTTP, RIP, SMB, Syslog, PPTP, TFTP, DCERPC, OSPF, BGP\\
+    Probe & 13 & Telnet, SNMP, SunRPC Portmapper (TCP) UDP Service, SunRPC Portmapper (TCP) TCP Service, SunRPC Portmapper (UDP) UDP Service, NetBIOS, DNS, HTTP,
+    SunRPC Portmapper (UDP), ICMP, SCTP, MSSQL, SMTP\\
+    Shellcode & 15 & FreeBSD, HP-UX, NetBSD, AIX, SCO Unix, Linux, Decoders, IRIX, OpenBSD, Mac OS X, BSD, Windows, BSDi, Multiple OS, Solaris\\
+    Analysis & 3 & HTML, Port Scanner, Spam\\
+    Backdoors & 1 & Backdoors\\
+    DoS & 36 & Ethernet, SunRPC, LDAP, Browser, DCERPC, Telnet, NetBIOS/SMB, DNS, TCP, Common Unix Print System (CUPS), Miscellaneous, ISAKMP, Hypervisor, 
+    Cisco Skinny, IIS Web Server, IGMP, ICMP, XINETD, SIP, RTSP, Windows Explorer, IRC, NTP, CUPS, Asterisk, HTTP, Microsoft Office, SSL, IMAP, SMTP, Oracle, RDP, VNC, FTP, TFTP, SNMP\\
+    Exploits & 54 &Clientside Microsoft Paint, Dameware, Clientside Microsoft Media Player, SSH, SCCP, Unix r Service, SunRPC, LDAP, Web Application, Browser, DCERPC, Interbase, Telnet, DNS, TCP, Webserver, SCADA, SMB, Miscellaneous, Cisco IOS, All, LPD, RADIUS, RDesktop, Unix 'r' Service, IGMP, POP3, ICMP, Clientside Microsoft, Microsoft IIS, Backup Appliance, IDS, Apache, NNTP, RTSP, Evasions, SIP, WINS, Office Document, PHP, Clientside Microsoft Office, Miscellaneous Batch, Browser FTP, MSSQL, SOCKS, PPTP, Clientside, SSL, IMAP, SMTP, Oracle, VNC, FTP, TFTP\\
+    Generic& 7 &All,SIP,HTTP,SMTP,IXIA,TFTP,Superflow\\
+    Reconnaissance& 14 &DNS, HTTP, ICMP, MSSQL, NetBIOS, SCTP, SMTP, SNMP, SunRPC, SunRPC Portmapper (TCP) TCP Service, SunRPC Portmapper (TCP) UDP Service, SunRPC Portmapper (UDP) TCP Service, SunRPC Portmapper (UDP) UDP Service, Telnet\\
+    Worms&1&Worms\\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+\subsection{实验环境}
+为了评估本文所提方案的有效性，本文将利用python语言来实现以上流程，并选用表~\ref{tab:env_setting}~中的配置来进行实验。
+
+\begin{table}[htbp]
+  \caption{实验设备配置}
+  \label{tab:env_setting}
+  \centering
+  \begin{tabular}{ccc}
+    \toprule
+    \textbf{环境类别} & \textbf{设备项目} & \textbf{项目参数}\\
+    \midrule
+    \multirow{6}{*}{硬件环境}& CPU型号 & Intel(R) Core(TM) i7-11800H\\
+                            & CPU规格 & 8核16线程@2.30GHz\\
+                            & GPU型号 & NVIDIA GeForce RTX 3060 Laptop GPU\\
+                            & 内存大小& 16.0 GB\\
+                            & 硬盘类型& SSD\\
+                            & 硬盘大小& 1TB\\
+                            \hline
+    \multirow{3}{*}{软件环境}&操作系统&Windows 11\\
+                            &开发语言&Python 3.11.7\\
+                            &编辑器 &Visual Studio Code\\                       
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{评估指标}
+本文主要使用准确度 (Accuracy)、精确度 (Precision)、召回率 (Recall)、加权平均 F1 分数 (Macro Averaged F1 Score)、宏平均 F1 分数 (Macro Averaged F1 Score)这5个评价指标对我们的方案进行全方位的评估。
+以下是这5个指标的简单介绍。\par
+(1) 准确度\par
+表示模型正确预测的比例，是所有正确预测的数量除以总预测数量。
+\begin{equation}
+  \label{eq:val_score1}
+  Accuracy = \frac{Number of Correct Predictions}{Total Number of Predictions} = \frac{TP + TN}{TP + TN + FP + FN}
+\end{equation}
+
+(2) 精确度\par
+简称精度，也称为查准率，是所有模型预测为正类的样本中，实际为正类的比例。
+\begin{equation}
+  \label{eq:val_score2}
+  Precision = \frac{TP}{TP + FP}
+\end{equation}
+
+(3) 召回率\par
+召回率，也称为真正率、查补率，是模型正确识别为正类的样本占所有实际正类样本的比例。
+\begin{equation}
+  \label{eq:val_score3} 
+  Recall = \frac{TP}{TP + FN}
+\end{equation}
+
+% (4) F1 分数\par
+% F1 分数是精确度和召回率的调和平均，用于衡量模型的精确度和召回率的平衡程度。
+% \begin{equation}
+%   \label{eq:val_score4}
+%   F1 = 2 \times \frac{Precision \times Recall}{Precision + Recall} = \frac{2TP}{2TP + FP + FN}
+% \end{equation}
+
+(4)宏平均 F1 分数\par
+宏平均 F1 分数是一种性能评估指标，用于衡量模型在所有类别上的平均表现。
+它通过简单地计算所有类别 F1 分数的算术平均值得出，每个类别被赋予相同的权重，不论其样本量大小。
+
+\begin{equation}
+ \label{eq:val_score4}
+F1_{macro} = \frac{1}{N} \sum\limits_{i=1}^{N} F1_i
+\end{equation}
+\begin{flushleft}
+  \renewcommand\arraystretch{1.25}
+  \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
+  式中& $\symbf{F1_{macro}}$ &表示宏平均 F1 分数；\\
+  &  $\symbf{N}$&类别总数；\\
+  &  $\symbf{F1_i}$ & 表示第 $i$ 个类别的 F1 分数。\\
+  \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
+\end{flushleft}
+
+宏平均 F1 分数特别适用于样本分布不均匀的数据集，因为它给每个类别分配了同等的重要性。
+这样做确保了即使某些类别的样本数量很少，它们在计算平均分数时也会有相等的影响。
+
+(5) 加权平均 F1 分数\par
+加权平均F1分数是一种性能评估指标，通过根据每个类别的样本量对其F1分数进行加权平均，以反映所有类别的整体性能。
+每个类别的重要性通过其在数据集中的相对比例来确定。
+
+\begin{equation}
+  \label{eq:val_score5}
+  F1_{weighted} = \sum\limits_{i=1}^{N} w_i \cdot F1_i
+\end{equation}
+\begin{flushleft}
+  \renewcommand\arraystretch{1.25}
+  \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
+  式中& $\symbf{F1_{weighted}}$ &加权平均F1分数；\\
+  &  $\symbf{N}$&类别总数；\\
+  &  $\symbf{F1_i}$ &第$i$个类别的F1分数\\
+  &  $\symbf{w_i}$ & 第$i$个类别的权重，通常由该类别的样本数量占总样本数量的比例确定。\\
+  \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
+  \end{flushleft}
+
+% (6) 混淆矩阵\par
+% 混淆矩阵是一种特定的表格布局，用于可视化模型性能，显示实际类别与模型预测类别之间的关系。
+% \begin{equation}
+%   \label{eq:val_score6}
+%   Confusion Matrix = \begin{bmatrix} TP & FP \\ FN & TN \end{bmatrix}
+% \end{equation}
+
+% (7) ROC-AUC 分数\par
+% ROC-AUC 分数是接收者操作特征（ROC）曲线下面积的度量，用于评估分类器的预测能力。
+% \begin{equation}
+%   \label{eq:val_score7}
+%   AUC = \int_{0}^{1} TPR(FPR) \, d(FPR)
+% \end{equation}
+
+以上五式\ref{eq:val_score1}、\ref{eq:val_score2}、\ref{eq:val_score3}、\ref{eq:val_score4}、\ref{eq:val_score5}%\ref{eq:val_score6}、\ref{eq:val_score7}%
+中,
+  $TP$(True Positives)表示正确地将正类预测为正类;
+  $TN$(True Negatives)表示正确地将负类预测为负类；
+  $FP$(False Positives)表示错误地将负类预测为正类；
+  $FN$(False Negatives)表示错误地将正类预测为负类。
+
+\subsection{特征编码效果实验评估}
+
+  在本次实验中，我们通过比较了特征编码前后各种机器学习和深度学习模型的准确率(图~\ref{fig:comapre_accuracy_encoding}~以及表~\ref{tab:model_performance}\footnote{由于表格长度有限，朴素贝叶斯的表现我们没有放到表格中，朴素贝叶斯特征编码前后各性能指标变化：Acc 97.72\% \rightarrow 97.27\% ,f1\_mac 0.3376 \rightarrow 0.2166, f1\_wei 0.9726 \rightarrow 0.9729。}
+  ~)，得出了一些发现。
+  \begin{figure}[htbp]
+    \centering
+    \includegraphics[width = \textwidth]{acc.png}
+    \caption{特征编码前后模型预测准确率对比条状图}
+    \label{fig:comapre_accuracy_encoding}
+    \end{figure}
+    首先，决策树模型显示出了对输入数据表示形式的鲁棒性，其准确率在特征编码前后保持不变。而逻辑回归和K近邻这样的模型则在特征编码后显示出了轻微的准确率提升，暗示了特征编码对于这类模型可能带来的轻微性能改进。
+  相反，朴素贝叶斯模型在特征编码后的准确率却明显下降，可能是由于特征编码改变了数据的分布假设，从而对基于概率的模型产生了较大影响。
+  深入到深度学习模型，ResNet和BiGRU在特征编码后展现出准确率的稳定提升，这可能归因于这些模型能够从编码后的特征中学习到更加复杂和深层的数据表示。
+  特别值得注意的是，采用\textbf{模态特征融合策略的ResNet-BiGRU模型}，在特征编码前后都表现出了所有模型中最高的准确率，尤其是在特征编码后，其准确率达到了的99.46\%，凸显了模态融合在提高模型处理能力方面的显著优势。\par
+  \begin{figure}[htbp]
+    \centering
+    \includegraphics[width = \textwidth]{f1-mac.png}
+    \caption{特征编码前后模型f1 macro score对比条状图}
+    \label{fig:f1_macro_score}
+    \end{figure}
+  \begin{figure}[htbp]
+    \centering
+    \includegraphics[width = \textwidth]{f1-wei.png}
+    \caption{特征编码前后模型f1 weighted score对比条状图}
+    \label{fig:f1_weighted_score}
+\end{figure}
+
+\begin{table}[htbp]
+  \centering
+  \caption{特征编码前后模型表现}
+  \label{tab:model_performance}
+  \begin{tabular}{ccccccccc}
+  \toprule
+  & DT & LR & KNN & Ada & ResN & BiG & RNB-NMF& RNB-MF\\
+  \midrule
+  \multicolumn{9}{c}{\textbf{特征编码前}}\\
+  Acc & 99.19\% & 98.66\% & 98.68\%  & 97.22\% & 98.92\% & 98.85\% & 98.89\% & 99.45\% \\
+  f1\_mac & 0.5422 & 0.3730 & 0.4042  & 0.3609 & 0.4110 & 0.493 & 0.518 & 0.529 \\
+  f1\_wei & 0.9925 & 0.9874 & 0.9872  & 0.9704 & 0.9892 & 0.9885 & 0.9891 & 0.9945 \\
+  \midrule
+  \multicolumn{9}{c}{\textbf{特征编码后}}\\
+  Acc & 99.19\% & 98.72\%\uparrow & 98.70\%\uparrow  & 97.14\%\downarrow & 98.94\%\uparrow & 98.85\% & 98.91\%\uparrow & 99.46\%\uparrow \\
+  f1\_mac & 0.5378\downarrow & 0.3871\uparrow & 0.4090\uparrow  & 0.3197\downarrow & 0.4166\uparrow & 0.495\uparrow & 0.52\uparrow & 0.53\uparrow \\
+  f1\_wei & 0.9925 & 0.9879\uparrow & 0.9873\uparrow  & 0.9723\uparrow & 0.9898\uparrow & 0.9885 & 0.9892\uparrow & 0.9946\uparrow \\
+  \bottomrule
+  \end{tabular}
+\end{table}
+整体而言，所有模型在准确率方面都表现出较高的水平，特别是在特征编码后，大多数模型的准确率略有提升，说明特征编码对模型性能有正面影响。
+具体到F1分数，F1 Macro(图~\ref{fig:f1_macro_score}~)和F1 Weighted(图~\ref{fig:f1_weighted_score}~)分数在特征编码后也显示出类似的趋势。
+在深度学习模型方面，ResNet和BiGRU表现出了较好的性能提升，尤其是在特征编码后，这可能归因于深度学习模型能够从编码后的特征中学习到更加复杂的表示。
+同样值得注意的是，采用\textbf{模态融合策略的ResNet-BiGRU模型}在所有评价指标上都表现最优，无论是在特征编码前还是编码后。
+通过观察完数据后，我们可以看到特征编码和模型选择对于提升模型性能具有重要意义。
+模态特征融合技术尤其在提高复杂模型的准确率和F1分数方面显示出显著的优势，这为未来在模型设计和特征工程方面的研究提供了有价值的参考。\par
+
+\subsection{数据集平衡处理效果实验评估}
+在处理网络流量数据时，一个常见的挑战是数据的不平衡性。特别是在网络安全领域，正常流量的样本远多于异常或攻击流量的样本。
+例如，本章所使用到的数据集种正常流量占总样本的87\%，这意味着即使一个模型将所有流量都预测为正常流量，其准确率也能达到87\%。
+然而，这种模型对于检测异常流量来说是无效的，因为它无法识别出任何异常样本，这显然不是我们期望的结果。\par
+
+
+\begin{table}
+  \centering
+  \caption{数据集平衡处理前后数据量变化}
+  \label{tab:attack_num}
+\begin{tabular}{ccc}
+\toprule
+\textbf{攻击类型}&\textbf{过采样前}&\textbf{过采样后}\\
+\midrule
+Fuzzers&3775&50844\\
+Analysis&382&50844\\
+Backdoors&400&50844\\
+DoS&879&50844\\
+Exploits&4038&50844\\
+Generic&5587&50844\\
+Reconnaissance&1316&50844\\
+Shellcode&164&50844\\
+Worms&18&50844\\
+normal&508447&508447\\
+  % 2 4 8 16 32 64 128
+  %        104  96
+  %        108  112
+  %        110
+  %        111
+  \bottomrule
+\end{tabular}
+  
+\end{table}
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width = 0.8\textwidth]{try_construct.png}
-  \caption{算法~\ref*{alg:try_construct}~流程图}
-  \label{fig:try_construct}
-\end{figure} 
+  \includegraphics[width = \textwidth]{smote.png}
+  \caption{SMOTE过采样前后，1000个样本中各种攻击类别的样本点变化，这里省略了normal样本点}
+  \label{fig:prepostsmote}
+\end{figure}
 
-\section{概率模型和最小期望的数据包数}
-\label{sec:mainbody} 
-假设攻击者距离受害者服务器有d跳，IGPPM方案中数据包记录m个路由器接口
-号，则从攻击者到受害者服务器的完整路径中的所有路由器总共可分为$k = 
-\lceil d/m \rceil$组，标记概率为p。不同于传统概率包标记法的概率模型
-，本方案只有当前一组路由器进行标记后，后一组路由器才可进行p概率确定
-是否标记；若前一个路由器不标记，那么之后的所有路由器也将不会进行标
-记，这将导致则受害者服务器在收到一个标记数据包时，此标记数据包携带
-第i组路由信息的概率为：
-\begin{equation}
-  \label{eq:Probability of i-th Router}
-  f(i) = 
-  \begin{cases} 
-    p^{i-1}(1-p), & 1 \leq i \leq k-1 \\
-    p^{k-1}, & i = k 
-  \end{cases}
-\end{equation}
-因此受害者服务器收集的数据包数量能够覆盖所有路由器是由
-\begin{equation}
-  \label{eq:Path Coverage Probability}
-  g(p) = \min\{(1 - p), p(1 - p), \ldots, p^{k-2}(1 - p), p^{k-1}\}
-\end{equation}
-所决定的，完成路径重构所需的最少数据包数量为：
-\begin{equation}
-  \label{eq:Minimum Packets for Path Reconstruction}
-  z(p) = \frac{1}{g(p)} = \frac{1}{\min\{(1 - p), p(1 - p), \ldots, p^{k-2}(1 - p), p^{k-1}\}}
-\end{equation}
+为了解决这一问题，我们采用了SMOTE算法对异常样本进行过采样。
+通过这种方法，我们能够增加异常流量样本的数量，从而改善训练数据的平衡性。
+过采样的结果如表~\ref{tab:attack_num}所示，从中可以看出，过采样后各类样本的数量有了明显的变化。
+此外，我们使用PCA（主成分分析）方法将样本降维到2D平面上，并在图~\ref{fig:prepostsmote}中展示了过采样前后的情况。
+从图中可以清晰地看到，攻击样本的数量在过采样后有了显著的增加，这有助于模型学习到更加均衡的数据表示。
+最终，我们评估了过采样对模型性能的影响。
+表~\ref{tab:model_performance_oversampling}~、~\ref{tab:oversampling_performance}~展示了过采样前后各类样本检测的精确度和召回率的变化。
 
 
-要使$z(p)$取最小值，只需$g(p) = \min\{(1 - p), p(1 - p), \ldots, p^{k-2}(1 - p), p^{k-1}\}
-$取最大值即可。其中$\min\{(1 - p), p(1 - p), \ldots, p^{k-2}(1 - p)\} = p^{k-2}(1 - p)$，因此$g(p) = \min\{(1 - p), p(1 - p), \ldots, p^{k-2}(1 - p), p^{k-1}\}
- = \min\{p^{k-2}(1 - p), p^{k-1}\}$。进一步分析知，当$p<1/2$时，$p^{k-1}<p^{k-2}(1 - p)$，此时$g(p) = p^{k-1}$；当$p>1/2$时，$p^{k-2}(1 - p)<p^{k-1}$，此时$g(p) = p^{k-2}(1 - p)$
-，即
-\begin{equation}
-  \label{eq:Simplified Probability of i-th Router}
-  g(p) = 
-  \begin{cases} 
-    p^{k-1}, & p \leq \frac{1}{2} \\
-    p^{k-2}(1 - p), & p > \frac{1}{2}
-  \end{cases}
-\end{equation}
+\begin{table}[htbp]
+  \centering
+  \caption{过采样前后各种攻击检测召回率变化}
+  \label{tab:model_performance_oversampling}
+  \begin{tabular}{cccccccccc}
+  \toprule
+  & DT & LR & KNN & NB & Ada & ResN & BiG & RNB-NMF & RNB-MF \\
+  \midrule
+  \multicolumn{10}{c}{\textbf{过采样前}}\\
+  Fuzzers & 0.825 & 0.624 & 0.614 & 0.019 & 0.064 & 0.713 & 0.709 & 0.699 & 0.842 \\
+  Analysis & 0.115 & 0 & 0 & 0.566 & 0.844 & 0 & 0 & 0 & 0.361 \\
+  Backdoors & 0 & 0 & 0 & 0 & 0.059 & 0 & 0 & 0 & 0.288 \\
+  DoS & 0.165 & 0.051 & 0.114 & 0.008 & 0 & 0.017 & 0.322 & 0.341 & 0.458 \\
+  Exploits & 0.666 & 0.705 & 0.639 & 0.04 & 0.001 & 0.808 & 0.716 & 0.796 & 0.796 \\
+  Generic & 0.962 & 0.925 & 0.931 & 0.956 & 0.921 & 0.935 & 0.876 & 0.899 & 0.943 \\
+  Reconnaissance & 0.91 & 0.755 & 0.58 & 0.019 & 0.854 & 0.739 & 0.743 & 0.757 & 0.946 \\
+  Shellcode & 0.66 & 0 & 0.14 & 0.98 & 0.76 & 0.067 & 0.045 & 0.073 & 0.937 \\
+  Worms & 0 & 0 & 0 & 0.75 & 0 & 0 & 0 & 0 & 0 \\
+  normal & 1 & 0.997 & 0.997 & 0.993 & 0.99 & 0.998 & 0.999 & 0.999 & 0.999 \\
+  \midrule
+  \multicolumn{10}{c}{\textbf{过采样后}}\\
+  Fuzzers & 0.838 & 0.041 & 0.701 & 0.099 & 0.606 & 0.723 & 0.714 & 0.703 & 0.857 \\
+  Analysis & 0.452 & 0.032 & 0.565 & 0 & 0 & 0.013 & 0 & 0 & 0.564 \\
+  Backdoors & 0.362 & 0.31 & 0.431 & 0.931 & 0.948 & 0 & 0 & 0 & 0.412 \\
+  DoS & 0.521 & 0 & 0.479 & 0.009 & 0 & 0.023 & 0.125 & 0.16 & 0.634 \\
+  Exploits & 0.807 & 0 & 0.659 & 0.026 & 0 & 0.809 & 0.714 & 0.806 & 0.822 \\
+  Generic & 0.992 & 0.187 & 0.948 & 0 & 0.926 & 0.941 & 0.875 & 0.893 & 0.941 \\
+  Reconnaissance & 0.995 & 0 & 0.872 & 0.511 & 0 & 0.724 & 0.742 & 0.759 & 0.933 \\
+  Shellcode & 1 & 0 & 0.933 & 0.133 & 0.867 & 0.132 & 0.044 & 0.081 & 0.961 \\
+  Worms & 1 & 0 & 1 & 0 & 1 & 0 & 0 & 0 & 0 \\
+  normal & 1 & 0.99 & 0.97 & 0.624 & 0.985 & 0.996 & 0.999 & 0.999 & 0.999 \\
+  \bottomrule
+  \end{tabular}
+\end{table}
+  
 
-再进一步分析知当$k>2$时，$p = \frac{k-2}{k-1}$，$g(p)$最大；当$k \leq 2$，
-$p = 1/2$时，$g(p)$最大。也就是说当$k = \lceil d/m \rceil >2$时，
-$p = \frac{k-2}{k-1}$,完成路径重构所需数据包数量最少，为
-$\frac{(k-1)^{k-1}}{(k-2)^{k-2}}$，当$k = \lceil d/m 
-\rceil \leq 2$，$p = 1/2$，完成路径重构所需数据包数量最少为
-$2^{k-1}$。
 
-\section{实验设计和结果分析}
-\label{sec:bib}
+\begin{table}[htbp]
+  \centering
+  \caption{过采样前后各种攻击检测精度变化}
+  \label{tab:oversampling_performance}
+  \begin{tabular}{lccccccccc}
+  \toprule
+  & DT & LR & KNN & NB & Ada & ResN & BiG & RNB-NMF & RNB-MF \\
+  \midrule
+  \multicolumn{10}{c}{\textbf{过采样前}} \\
+  Fuzzers & 0.659 & 0.455 & 0.497 & 0.667 & 0.545 & 0.542 & 0.534 & 0.536 & 0.697 \\
+  Analysis & 1 & 0 & 0 & 0.117 & 0.054 & 0 & 0 & 0 & 0.201 \\
+  Backdoors & 0.0 & 0.0 & 0 & 0 & 0.092 & 0 & 0 & 0 & 0 \\
+  DoS & 0.255 & 0.279 & 0.206 & 0.222 & 0.0 & 0.250 & 0.23 & 0.17 & 0.27 \\
+  Exploits & 0.662 & 0.623 & 0.649 & 0.763 & 0.200 & 0.620 & 0.411 & 0.656 & 0.686 \\
+  Generic & 0.966 & 0.988 & 0.983 & 0.589 & 0.997 & 0.966 & 0.746 & 0.826 & 0.979 \\
+  Reconnaissance & 0.894 & 0.562 & 0.567 & 0.019 & 0.320 & 0.747 & 0.743 & 0.863 & 0.905 \\
+  Shellcode & 0.767 & 0.0 & 0.538 & 0.04 & 0.365 & 1 & 0.665 & 0.665 & 0.732 \\
+  Worms & 0.0 & 0 & 0 & 0.009 & 0 & 0 & 0 & 0 & 0 \\
+  normal & 1 & 0.998 & 0.997 & 0.998 & 0.99 & 0.998 & 0.999 & 0.999 & 0.999 \\
+  \midrule
+  \multicolumn{10}{c}{\textbf{过采样后}} \\
+  Fuzzers & 0.756 & 0.22 & 0.409 & 0.427 & 0.465 & 0.566 & 0.512 & 0.536 & 0.772 \\
+  Analysis & 0.065 & 0.037 & 0.147 & 0 & 0 & 0.052 & 0 & 0 & 0.253 \\
+  Backdoors & 0.053 & 0.032 & 0.135 & 0.011 & 0.140 & 0.013 & 0.112 & 0 & 0 \\
+  DoS & 0.17 & 0 & 0.162 & 0.002 & 0 & 0.102 & 0.24 & 0.205 & 0.24 \\
+  Exploits & 0.762 & 0 & 0.458 & 0.412 & 0 & 0.505 & 0.311 & 0.493 & 0.801 \\
+  Generic & 0.973 & 0.274 & 0.972 & 0 & 0.996 & 0.921 & 0.446 & 0.801 & 0.978 \\
+  Reconnaissance & 0.889 & 0 & 0.333 & 0.007 & 0 & 0.355 & 0.636 & 0.799 & 0.884 \\
+  Shellcode & 0.793 & 0 & 0.108 & 0.035 & 0.28 & 0.204 & 0.541 & 0.637 & 0.774 \\
+  Worms & 0 & 0 & 0.004 & 0 & 0.002 & 0 & 0 & 0 & 0 \\
+  normal & 0.999 & 0.976 & 0.999 & 0.999 & 0.995 & 0.996 & 0.999 &0.999 & 0.999 \\
+\bottomrule
+\end{tabular}
+\end{table}
+通过分析以上表格可知，过采样后，绝大多数模型在检测特定攻击类型时的召回率有了显著提高。
+尤其是对于那些原本难以被检测到的攻击类型，如Backdoors、Analysis等，过采样为这些攻击类型提供了更多的样本，使得模型能够学习到更加丰富的特征，从而在这些攻击类型上获得了更好的召回率。
+在检测精度方面，虽然过采样导致某些模型在某些攻击类型上的精度有所下降，这主要是因为增加了更多的少数类样本，模型在尝试提高对这些少数类的识别能力时，可能会牺牲一些对多数类的识别精度。
+然而，从整体上看，模型的总体性能是得到了改善的。\par
 
-为了验证本文所提方案的路由回溯能力，我们设计了在单个攻击者环境下的路由回溯实验。
-图~\ref*{fig:packets_num}~显示了本方案在 $m=2$ 和 $m=4$ 的情况下，与 PPM-Fixed 
-和 PPM-Dynamic 方案相比，完成不同距离的路由回溯，达到95\%成功率所需的最少数据包数
-量与路径长度之间的关系。其中IGPPM方案与PPM-Fixed方案所采用的标记概率分别为
-$p_{IGPPM}=\frac{k-2}{k-1}$，$p_{PPM-Fixed} = \frac{1}{d}$，也即$p$的选择能够分
-别使这几种回溯方案的回溯能力达到最佳状态，完成IP回溯所需要的数据包数量最少。
+另外，\textbf{RNB-MF模型}，即经过模态融合的残差网络和双向门控循环单元的组合，表现出了卓越的性能。
+在过采样后，不仅召回率在几乎所有攻击类型上都有所提高，其精度也在大多数情况下得到了维持以及小幅度的提升。
+这说明RNB-MF模型能够有效利用过采样带来的额外信息，而且模态融合策略提高了模型处理不平衡数据的能力，使其在面对复杂的攻击检测任务时，能够更加准确地识别出少数类攻击样本，同时保持对正常流量的高识别精度。
+
+
+图~\ref{fig:ResNet-BiGRU-NoFusion-loss}~、~\ref{fig:ResNet-BiGRU-Fusion-loss}~分别是未经过模态融合的残差网络和双向门控循环单元的组合以及经过模态融合的残差网络和双向门控循环单元的组合。
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width = 0.8\textwidth]{resnet_bigure_nmf.png}
+  \caption{RNB-NMF各epoch的损失曲线以及准确率曲线}
+  \label{fig:ResNet-BiGRU-NoFusion-loss}
+\end{figure}
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width = 0.8\textwidth]{packets_num.png}
-  \caption{路径重建所需数据包数量与路径长度关系（成功率 = 95\%）}
-  \label{fig:packets_num}
-\end{figure}   
-可以看出，本文提出的方案在完成路径重构时所需要的数据包数量要远远少于PPM-Fixed方案。
-当m=2时本方案略优于PPM-Dynamic方案，当m=4时则明显优于以上两种PPM类方案。另外，
-仔细观察图像可以发现，本文提出的方案表现出阶梯性特征，这是因为该方案采用了分组
-标记的方法：不管跳数d相差多少，只要$k = \lceil d/m \rceil$相同，完成路径重构所需
-要的数据包数量就会相同。
+  \includegraphics[width = 0.8\textwidth]{resnet_bigure_curve.png}
+  \caption{RNB-MF各epoch的损失曲线以及准确率曲线}
+  \label{fig:ResNet-BiGRU-Fusion-loss}
+\end{figure}
+通过观察损失函数图表。未经模态融合的模型训练和验证损失都在逐渐减小，但验证损失的波动较大，这可能表明模型在训练集上有过拟合的趋势。
+相比之下，经过模态融合的模型损失下降更为平滑，且在训练后期，验证损失几乎与训练损失保持一致，这表明模型具有更好的泛化能力。\par
 
+未经模态融合的模型虽然初始时展现出相对较高的准确率，但在训练过程中出现了明显的波动，特别是在验证准确率上，这很可能暗示了过拟合问题的存在。
+相比之下，经过模态融合的模型不仅在训练初期就迅速提升了准确率，而且在后续的训练过程中也持续保持在非常高的水平，几乎没有任何波动。
+这一表现充分体现了本文所设计的模型强大的稳定性和预测准确率。\par
 
-在传统的PPM类方案中，完成路径重构所需的数据包数量通常指完成路由覆盖所需的数据包数量，
-而非直接获得一条有序攻击路径的数据包数量。要想获得一条有序的攻击路径仍需要额外的操作，
-例如网络探测、ISP网络地图等以确定具体的攻击路径。而在本方案中，可直接利用标记数据包
-，获取接口号路径。之后再依据接口号路径，依次查询路由器便可获得一条有序的攻击路径。
+\section{基于iCaRL的RNB-MF增量学习方案}
+在前几个小节中，我们已经通过实验验证了RNB-MF模型在网络攻击检测任务上的性能优势。
+具体而言，此模型针对UNSW-NB15数据集中的网络流量数据展现出了卓越的处理效果。
+然而，该模型的应用范围受限于其训练数据集的特定特性。
+这表明，面对与UNSW-NB15数据集具有本质差异的数据时，模型的表现可能会受到影响。
+例如，随着时间推移，新数据的不断累积使得模型需不断适应新增的信息，而旧数据可能因存储限制或隐私保护政策等因素而逐渐失去可用性。
+此外，学习任务的复杂度亦可能随之增加，如分类任务中类别数的增长等，而这些变化往往无法事先预定义。\par
+
 
 \begin{figure}[htbp]
   \centering
-  \subcaptionbox{数据包空间开销\label{fig:packet_overhead}}[0.44\textwidth]{
-  \includegraphics[width=0.45\textwidth]{packet_overhead.png}
+  \includegraphics[width=0.75\textwidth]{increment_learning.drawio.png}
+  \caption{增量学习原理图}
+  \label{fig:incremental_learning}
+\end{figure}
+因此，探索如何有效地使模型适应新类型的数据，以及如何在数据动态变化的情境下保持模型的稳定性和准确性，成为了重要的研究课题。
+针对这一问题，增量学习（Incremental Learning）的概念便成为解决上述问题的一个有效途径。
+增量学习(图~\ref{fig:incremental_learning}~)旨在使模型能够逐渐适应新数据或新任务，而无需从头开始重新训练模型。
+具体而言，增量学习允许模型在保留已学习知识的基础上，持续地吸收新信息并更新其知识库。
 
+\subsection{方案具体设计}
+iCaRL（Incremental Classifier and Representation Learning）\cite{rebuffi2017icarl}是一种经典的基于回放的增量学习策略。
+基于回放的增量学习的基本思想就是"温故而知新"，即在接受新任务的训练过程中，同时回顾一部分精选的旧数据，以此来保持模型对先前学习任务的记忆。
+因此，决定保留哪些旧任务数据以及如何有效地结合旧数据和新数据进行模型训练，是这类方法需要考虑的主要问题。\par
+
+
+iCaRL的一般步骤为数据特征的学习、记忆集的管理，以及通过知识蒸馏减轻模型的遗忘。
+当面对新的数据批次时，iCaRL首先结合这些新数据和从记忆集中选出的代表性样本来更新模型。
+记忆集是由每个已知类别中挑选出的一小部分样本构成，旨在代表整个类别的特征分布。
+通过在训练过程中包含这些样本，模型可以重新回顾已学习的类别，从而在学习新知识的同时，尽量减少对旧知识的遗忘。
+接着，iCaRL通过一个更新的特征提取器来获取数据的特征表示，并利用这些特征来进行分类学习。
+在学习新类别的同时，iCaRL使用知识蒸馏来保持对过去学习内容的记忆。
+通过将旧模型对同一数据的输出作为额外的训练目标，新模型能够在吸收新信息的同时，减少对旧信息的遗忘。
+分类决策在iCaRL中是通过计算样本与每个类别的代表性样本（即记忆集中的样本）的平均特征向量(即类中心见公式\ref{eq:class_means})之间的距离来进行的。
+\begin{equation}
+  \label{eq:class_means}
+  \mu_c = \frac{1}{|P_c|} \sum_{p \in P_c} f(p)
+\end{equation}
+\begin{flushleft}
+  \renewcommand\arraystretch{1.25}
+  \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
+  式中& $\symbf{P_c}$ &表示类别$c$的样本集；\\
+  &  $\symbf{f(p)}$&样本$p$的特征表示。\\
+  \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
+\end{flushleft}
+分类决策的公式如式~\ref{eq:class_dist}~所示。
+\begin{equation}
+  \label{eq:class_dist}
+  \hat{y} = \arg\min_{c \in C} \|f(x) - \mu_c\|_2
+\end{equation}
+\begin{flushleft}
+  \renewcommand\arraystretch{1.25}
+  \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
+  式中& $\symbf{\hat{y}}$ &表示预测的类别；\\
+  &  $\symbf{|f(x) - \mu_c|_2}$&测试样本特征表示与类别$c$的类中心之间的欧氏距离。\\
+  \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
+\end{flushleft}
+这种基于最近中心的方法简单有效，因为它直接使用了模型学习到的特征表示来进行类别的判断。
+
+最后，更新记忆集是iCaRL算法中一个至关重要的步骤。
+随着新类别的加入，算法必须在有限的记忆容量中做出取舍，选择哪些样本继续保留在记忆集中。
+这通常会涉及到对每个类别进行均衡的考虑，确保模型能够公平地回顾所有已知类别，而不是偏向于某些特定的类别
+(针对此问题，本文接下来将会提出一种基于遗传算法的记忆集抽样优化方法。)
+
+基于此策略，本文接下来会将前章提出的RNB-MF模型整合到iCaRL框架中，进而赋予其增量学习的能力。
+融合RNB-MF模型的iCaRL策略实现伪代码如表~\ref{tab:RNB-MF-icarl}所示。
+\begin{table}[htbp]
+   \caption{融合RNB-MF模型的iCaRL}
+   \label{tab:RNB-MF-icarl}
+   \centering
+   \begin{tabularx}{1.0\textwidth}{cl}
+   \toprule
+   \multicolumn{2}{l}{\textbf{融合RNB-MF模型的iCaRL策略实现}}\\
+   \midrule
+   \multicolumn{2}{l}{\textbf{输入}: 训练序列中的一系列数据集 $\{D_1, D_2, ..., D_n\}$，每个类别保留的样本数 $m$} \\ 
+   \multicolumn{2}{l}{\textbf{输出}: 训练好的RNB-MF特征提取器 $f_{\theta}$，更新后的记忆集 $M$} \\
+   1& 初始化记忆集 $M$ 为空 \\
+   2& 初始化RNB-MF特征提取器 $f_{\theta}$ \\
+   3& $for$ 每个新的数据集 $D_t$: \\
+   4&\quad \textbf{a.合并新任务数据集和记忆集:}\\
+   5&\quad\quad $D'_t = D_t \cup M$ \\
+   6&\\
+   7&\quad \textbf{b.使用}$\symbf{D'_t}$\textbf{训练特征提取器网络}$\symbf{f_{\theta}}$\textbf{:}\\
+   8&\quad\quad 如果 $t > 1$，即不是处理第一个数据集: \\
+   9&\quad\quad\quad i.使用$f_{\theta}$的旧版本对$x$进行前向传播，得到旧类别的输出$logits_{old}$\\
+   10&\quad\quad\quad ii.使用知识蒸馏损失和分类损失来更新 $f_{\theta}$: \\
+   11&\quad\quad\quad\quad $L = (1 - \alpha) L_{CE} + \alpha L_{KD}$ \Comment{L:整体损失,$L_{CE}$:蒸馏损失，$L_{KD}$:标准交叉熵损失}\\
+   12&\quad\quad 否则，如果是处理第一个数据集: \\
+   13&\quad\quad\quad 仅使用分类损失来训练 $f_{\theta}$ \\
+   14&\\
+   15&\quad \textbf{c.更新记忆集} $M$\textbf{:} \\
+   16&\quad\quad $for$ 每个类别 $c=1$ 到 $n$: \\
+   17&\quad\quad\quad i.从属于类别$c$的数据集$D_c$中提取所有样本$\{x_1, x_2, ..., x_k\}$ \\
+   18&\quad\quad\quad ii.使用当前的特征提取器网络$f_{\theta}$计算每个样本的特征表示 \\
+   19&\quad\quad\quad iii.计算类别$c$的特征均值向量$\mu_c$\\
+   20&\quad\quad\quad vi.选择$m$个样本存入$M$，基于样本对特征空间的覆盖范围\\
+   21&\\
+   22&\quad\textbf{d.更新分类器:} \\
+   23&\quad\quad 对于记忆集$M$中的每个类别$c$: \\
+   24&\quad\quad\quad 计算类别$c$的特征表示的均值（类中心）$\mu_c$\\
+   25&\quad\quad 当需要对新样本$x$进行分类时:\\
+   26&\quad\quad\quad i.使用$f_{\theta}$计算x的特征表示$f(x)$\\
+   27&\quad\quad\quad ii.计算$f(x)$与每个类中心$\mu_c$之间的距离\\
+   28&\quad\quad\quad iii.将$x$分类到距离最近的类中心所代表的类别\\
+   \bottomrule
+   \end{tabularx}
+  \end{table}
+
+\subsection{基于遗传算法的记忆集优化抽样}
+% 在数据集预处理过程中，数据抽样操作是一项关键步骤，尤其在处理大规模数据集时。
+% 它不仅能帮助减少计算资源的消耗，还能在一定程度上避免模型过拟合。
+% 数据抽样通常被用来从一个大型数据集中选取一个代表性的子集，以进行更为快速和高效的分析。\par
+% 数据抽样的基本目标是确保选取的样本能够尽可能地反映出总体数据的特性，包括数据的分布、均值、方差等统计属性。
+% 抽样方法大致可以分为两大类：\textbf{概率抽样}和\textbf{非概率抽样}。\par
+
+% 在概率抽样中，每个样本被选中的概率是已知的，这保证了样本的代表性。
+% 概率抽样的方法包括简单随机抽样、系统抽样、分层抽样和簇抽样等。
+% 在非概率抽样中，样本的选择依赖于研究者的主观判断，而非随机机制，因此每个样本被选中的概率是未知的。
+% 常见的非概率抽样方法包括方便抽样、判断（或目的性）抽样和配额抽样等。\par
+
+
+% \textbf{分层抽样}是一种高效的概率抽样技术，特别适用于处理不均衡数据集。
+% 这种方法的核心优势在于它确保了数据集中所有关键的子群体在样本中都能得到适当的代表性。
+% 在不均衡数据集的情况下，少数类别的样本容易在随机抽样过程中被遗漏，尤其是当这些类别的样本数量极少时。
+% 分层抽样通过保障这些少数类别在样本中的充分代表性，显著提升了模型对这些类别的识别能力。\par
+
+% 此外，分层抽样通过确保样本中所有相关子群体的均匀分布，有助于降低样本的方差，进而提高估计的准确性。
+% 这一点对于不均衡数据集尤为重要，因为少数类别对模型的整体性能可能产生显著影响。
+% 通过在训练过程中考虑到数据集中的所有子群体，分层抽样促进了模型的泛化能力，使模型能够更有效地处理现实世界数据的多样性与复杂性。
+% 通过图~\ref{fig:kddtraindistribution}、\ref{fig:kddtestdistribution}和\ref{fig:UNSW-NB15barchart}~明显可以看出，本文采用的数据集是非常不均衡的，因此本文将会使用分层抽样对数据集进行处理。
+% 然而对于分层抽样的最佳比率，却不能通过直观的获取到。为了取得最优的抽样比率，本文将会利用遗传算法对分层抽样进行优化。
+% 对于遗传算法，本文已在第~\ref{eq:GA}~章介绍，这里不再赘述，只给出具体实施细节。\par
+
+% \textbf{分层抽样}是一种高效的概率抽样技术，特别适用于处理不均衡数据集。
+% 这种方法的核心优势在于它确保了数据集中所有关键的子群体在样本中都能得到适当的代表性。
+% 在不均衡数据集的情况下，少数类别的样本容易在随机抽样过程中被遗漏，尤其是当这些类别的样本数量极少时。
+% 分层抽样通过保障这些少数类别在样本中的充分代表性，显著提升了模型对这些类别的识别能力。\par
+
+% 此外，分层抽样通过确保样本中所有相关子群体的均匀分布，有助于降低样本的方差，进而提高估计的准确性。
+% 这一点对于不均衡数据集尤为重要，因为少数类别对模型的整体性能可能产生显著影响。
+% 通过在训练过程中考虑到数据集中的所有子群体，分层抽样促进了模型的泛化能力，使模型能够更有效地处理现实世界数据的多样性与复杂性。
+% 通过图~\ref{fig:kddtraindistribution}、\ref{fig:kddtestdistribution}和\ref{fig:UNSW-NB15barchart}~明显可以看出，本文采用的数据集是非常不均衡的，因此本文将会使用分层抽样对数据集进行处理。
+% 然而对于分层抽样的最佳比率，却不能通过直观的获取到。为了取得最优的抽样比率，本文将会利用遗传算法对分层抽样进行优化。
+
+
+在进行增量学习的过程中，每当遇到新的流量类别时，模型就必须在有限的记忆空间内作出取舍。
+这就需要确定每个类别的样本在记忆集中应保留的数量或比例，因此对记忆集内各类样本的有效抽样变得十分关键。
+虽然传统的iCaRL策略倾向于采用均衡抽取的方法，即平等地从各个类别中抽取样本以保持类别间的平衡，但这种方法并不总能保证模型训练后的分类效果达到最佳。
+这是因为不同类别的样本对于模型学习的贡献度并不相同，简单的均衡抽样可能无法充分考虑到样本对模型性能的实际影响。
+
+针对这一问题，本小节提出了采用遗传算法优化的抽样策略。
+遗传算法是一种模拟自然选择和遗传机制的搜索算法，它通过迭代进化找到问题的最优解。
+在iCaRL的上下文中，遗传算法被用来优化记忆集中各个类别样本的保留比例，目标是在有限的记忆空间内最大化模型的分类性能。
+对于遗传算法，本文已在第~\ref{eq:GA}~章介绍，这里不再赘述，只给出具体实施细节。\par
+
+(1) 遗传算法的选择\par
+遗传算法的种类以及策略多种多样,在这里我们选择采用稳态遗传算法（Steady State Genetic Algorithm, SSGA）作为优化策略。
+与传统的遗传算法相比，稳态遗传算法的特点在于每次迭代只替换种群中的一小部分个体，而不是进行全种群的更新。
+这种方法的优势在于绝大多数个体在迭代过程中保持不变，从而避免了每次迭代都进行完整的种群更换。\par
+
+考虑到本文中个体适应度评估的复杂性——每个个体的评估需要经过完整的模型训练及性能评估过程——采用标准遗传算法（即采用完全生成替换策略的遗传算法，其中每次迭代都替换整个种群）将显著增加计算负担，并可能不利于优良基因的保留。
+相反，稳态遗传算法通过每次只替换部分种群的策略，不仅大幅度降低了计算量，而且有助于保持种群中的优秀个体。
+这种策略的实施有助于加速算法的收敛过程，并且，通过有效地保留高质量的解，稳态遗传算法能够在全局搜索和局部搜索之间取得更好的平衡，从而提高发现全局最优解的可能性。
+
+(2) 特征编码\par
+本文使用遗传算法搜索的目标是确定每个类别的样本在记忆集中应保留的数量或比例以便模型能够达到最佳分类效果。
+为了实现这一目标，本文将会利用样本类型的抽样比重来进行特征编码。
+遗传算法的每个个体（或称为“染色体”）代表一种可能的样本选择方案，其中包含了对应于数据集中每种样本类型的抽样比重。
+这些比重被编码为位于$[0,1)$区间的小数，分别表示各类型样本在总体抽样策略中的比重。
+以UNSW-NB15数据集为例，一个可能的染色体编码可以是{0.2, 0.3, 0.1, 0.5, 0.3,0.1,0.2,0.1,0.4,0.1}，这分别对应于十种样本类型的采样比重。
+需要注意的是，这些比重在实际应用中将会具体调整为抽样百分比。
+在进行实际训练时，通过计算训练集样本数量与各类样本抽样百分比的乘积，便可得到每类样本具体的抽样数量。
+例如，对于样本数量为100,000的数据集，该染色体对应的每类样本采样百分比、采样数量如表~\ref{tab:Ga_code}~所示。\par
+
+\begin{table}
+  \caption{遗传算法编码方案}
+  \label{tab:Ga_code}
+  \centering
+  \begin{tabular}{cccc}
+    \toprule
+    \textbf{编码值(基因)}&\textbf{样本类型}&\textbf{采样百分比}&\textbf{抽样数量}\\
+    \midrule
+    0.2&normal&8.695652\%&8696\\
+    0.3&Fuzzers&13.043478\%&13043\\
+    0.1&Reconnaissance&4.347826\%&4348\\
+    0.5&Shellcode&21.73913\%&21739\\
+    0.3&Analysis&13.043478\%&13043\\
+    0.1&Backdoors&4.347826\%&4348\\
+    0.2&DoS&8.695652\%&8696\\
+    0.1&Exploits&4.347826\%&4348\\
+    0.4&Generic&17.391304\%&17391\\
+    0.1&Worms&4.347826\%&4348\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+(3) 适应度评估\par
+在本文中将会利用基因对应的抽样比率对训练集进行分层抽样，并利用RNB-MF模型在增强后的训练集上进行训练。
+最后再在验证集上使用accuracy\_score(公式~\ref{eq:val_score1}~)作为评价标准进行评估，评估值便作为该染色体对应的适应度。\par
+
+(4) 初始群体生成及迭代次数\par
+为了确保算法能够充分探索解空间并增加解的多样性，我们特别注重初代种群基因的广泛性和迭代过程的深入性。
+基于此目的，初始种群规模被设定为1,000个个体。
+这一较大的初始种群规模有助于覆盖更广泛的解空间，从而提高找到全局最优解的概率。
+同时，为了充分优化解并观察算法的收敛行为，设置了10,000次的迭代次数,以便于算法有足够的时间逐步改进解，并最终接近最优解。\par
+
+% \begin{table}[htbp]
+%   \caption{遗传算法实现}
+%   \label{tab:genetic_algorithm}
+%   \centering
+%   \begin{tabularx}{1.0\textwidth}{cl}
+%   \toprule
+%   \multicolumn{2}{l}{\textbf{遗传算法}}\\
+%   \midrule
+%   \multicolumn{2}{l}{\textbf{输入}: 种群大小 $P$，基因数量 $G$，代数 $N$，变异率 $M$} \\
+%   \multicolumn{2}{l}{\textbf{输出}: 适应度最高的染色体} \\
+%   1& 初始化种群 $pop$ \\
+%   2& \textbf{for} 每一代 \textbf{in} $N$: \\
+%   3&\quad 计算种群中每个个体的适应度： \\
+%   4&\quad\quad 依据染色体基因对应得抽样比率进行分层抽样组成训练集\\
+%   5&\quad\quad 利用此训练集对模型进行训练\\
+%   6&\quad\quad 将训练好的模型在测试集上进行评估取得准确率作为适应度 \\
+%   7&\quad 依据染色体适应度对应的概率采用轮盘赌方法选择两个父代 $p1$ 和 $p2$ \\
+%   8&\quad 通过 $crossover(p1, p2)$ 生成两个后代 $c1$ 和 $c2$  \\
+%   9&\quad 对 $c1$ 和 $c2$ 进行 $mutate$ 操作 \\
+%   10&\quad 将 $c1$ 和 $c2$ 加入到 $pop$ 中 \\
+%   11&\quad 再次计算种群中新进个体的适应度 \\
+%   12&\quad 根据适应度计算每个个体的淘汰概率，适应度越小淘汰概率越大 \\
+%   13&\quad 依据淘汰概率采用轮盘赌方法淘汰两个个体 \\
+%   14& \textbf{return} 适应度最高的染色体 \\
+%   \bottomrule
+%   \end{tabularx}
+% \end{table}
+
+\begin{table}[htbp]
+   \caption{遗传算法实现}
+   \label{tab:genetic_algorithm}
+   \centering
+   \begin{tabularx}{1.0\textwidth}{cl}
+   \toprule
+   \multicolumn{2}{l}{\textbf{遗传算法}}\\
+   \midrule
+   \multicolumn{2}{l}{\textbf{输入}: 种群大小 $P$，基因数量 $G$，代数 $N$，变异率 $M$} \\
+   \multicolumn{2}{l}{\textbf{输出}: 最优染色体} \\
+   1& 初始化种群(population) \\
+   2& \textbf{for} generation \textbf{in} $N$: \\
+   3&\quad \textbf{for} individual \textbf{in} population: \\
+   4&\quad\quad \#依据个体基因对应的抽样比率进行抽样\\
+   5&\quad\quad train\_set = sampling(train\_set,gene)\\
+   6&\quad\quad train(model, train\_set) \\
+   7&\quad\quad fitness = evaluate(model, test\_set) \\
+   8&\quad \#根据个体适应度利用轮盘赌选择法进行选择\\
+   9&\quad $p1, p2$ = select\_parents(population, fitness) \\
+   10&\quad $c1, c2$ = crossover($p1, p2$) \\
+   11&\quad mutate($c1$), mutate($c2$) with rate $M$ \\
+   12&\quad add $c1, c2$ to population \\
+   13&\quad update\_fitness(population) \\
+   14&\quad \#根据个体适应度对应的淘汰概率利用轮盘赌选择法进行淘汰\\
+   15&\quad eliminate\_individuals(population,fitness) \\
+   16& \textbf{return} highest\_fitness\_chromosome(population) \\
+   \bottomrule
+   \end{tabularx}
+  \end{table}
+
+(5) 选择、交叉和变异\par
+对于选择策略，本文采用轮盘赌选择法，该方法根据个体适应度相对于总体适应度的比例来分配选择概率。
+这种方法的优势在于能够有效保证高适应度个体被优先选择，从而引导种群朝着更优解空间方向进化。
+在交叉操作方面，为了降低计算的复杂度，本文选择了单点交叉方法。
+对于变异策略，本研究设置了0.1的固定概率对新生成的个体中的所有基因进行变异。
+在确定变异位置后，以相等的概率选择将该基因值进行1.2倍的放大或0.8倍的缩小。
+这样做的目的是保证个体的基因以较小的变化幅度进行细微调整，增强种群的探索能力，同时避免过大的变异导致优秀基因的丢失。
+表~\ref{tab:genetic_algorithm}~是我们遗传算法实现的伪代码。
+
+
+
+\section{基于iCaRL的RNB-MF增量学习方案实验评估}
+\subsection{NSL-KDD数据集\cite{revathi2013detailed}介绍}
+KDD Cup 99数据集\cite{tavallaee2009detailed}曾长期被视为网络入侵检测研究的标准化数据集。
+然而，该数据集存在一些显著的局限性，例如庞大的数据量和大量的冗余记录，这些因素共同导致了模型训练和测试的效率低下。
+为了解决这些问题并提高研究效率，NSL-KDD数据集应运而生，它在网络安全领域得到了广泛的应用和认可。
+
+
+NSL-KDD数据集的设计考虑到了消除冗余性、改善平衡性、增加多样性和扩展适用性。
+通过从原始的KDD Cup 99数据集中移除冗余记录，NSL-KDD显著减少了数据量，从而使得模型和算法能够在较短的时间内完成训练，同时降低了因数据冗余可能引入的偏差风险。
+尽管NSL-KDD并未完全解决数据类别不平衡的问题，但相较于其前身，它在一定程度上减轻了这一问题，为研究人员提供了一个更加平衡的数据环境。
+
+
+NSL-KDD数据集由41个特征组成，整体包括八个文件，分成四组数据，每组提供了两种格式：文本（.txt）和属性关系文件格式（.arff）。
+这些文件的详细描述如下表~\ref{tab:NSLKDDFile}~。
+\begin{table}[htbp]
+  \caption{NSL-KDD数据集各文件介绍}
+  \label{tab:NSLKDDFile}
+  \begin{tabularx}{\textwidth}{cXc}
+    \toprule
+    \textbf{文件名} & \textbf{描述} & \textbf{记录总数}\\
+  \midrule
+    KDDTrain+.ARFF & 完整的NSL-KDD训练集以二进制标签的ARFF格式提供 &125973\\
+    KDDTrain+.TXT & 完整的NSL-KDD训练集，包括攻击类型标签和难度级别，以CSV格式提供&125973\\
+    KDDTrain+20Percent.ARFF & KDDTrain+.arff文件的20\%子集&25192\\
+    KDDTrain+20Percent.TXT & KDDTrain+.txt文件的20\%子集 &25192\\
+    KDDTest+.ARFF & 完整的NSL-KDD测试集以二进制标签的ARFF格式提供 &22544\\
+    KDDTest+.TXT & 完整的NSL-KDD测试集，包括攻击类型标签和难度级别，以CSV格式提供 & 22544\\
+    KDDTest-21.ARFF & 不包含难度级别为21的记录的KDDTest+.arff文件的子集 &11850\\
+    KDDTest-21.TXT & 不包含难度级别为21的记录的KDDTest+.txt文件的子集&11850 \\
+  \bottomrule
+  \end{tabularx}
+\end{table}
+
+NSL-KDD数据集中包含的攻击流量可分为拒绝服务攻击（DoS）、远程到本地攻击（R2L）、用户到根攻击（U2R）以及探测攻击（Probe）共四种类别。
+如表~\ref{tab:attack_class}~所示，这四种类别又可细分为39种子类型。
+\begin{table}[h]
+  \caption{NSL-KDD数据集中每种攻击的不同子类的细分}
+  \label{tab:attack_class}
+  \begin{tabularx}{\textwidth}{@{}ccX@{}}
+  \toprule
+    \multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{子类}}\\
+  \midrule
+    DoS & 11 & apache2, back, land, neptune, mailbomb, pod, processtable, smurf, teardrop, dupstorm, worm\\
+    Probe & 6 & ipsweep, mscan, nmap, portsweep, saint, satan\\
+    U2R & 7 & buffer\_overflow, loadmodule, perl, ps, rootkit, sqlattack, xterm\\
+    R2L & 15 & ftp\_write, guess\_passwd, httptunnel, imap, multihop, named, phf, sendmail, snmpattack, spy, snmpguess, warezclient, warezmaster, xlock, xsnoop\\
+  \bottomrule
+  \end{tabularx}
+\end{table}
+
+表~\ref{tab:kdd_distribution}~则展示四种类别的攻击流量与正常流量在数据集中的分布占比。
+\begin{table}[h]
+  \caption{每种攻击类型的数据分布}
+  \label{tab:kdd_distribution}
+  \centering
+  \begin{tabular}{ccccccc}
+  \toprule
+  \textbf{数据集} & \textbf{总数} & \textbf{Normal} & \textbf{DoS} & \textbf{Probe} & \textbf{R2L} & \textbf{U2R}\\
+  \midrule
+  \multirow{2}{*}{KDDTrain+} & \multirow{2}{*}{125973} & 67343 & 45927 & 11656 & 995  & 52   \\
+                             &                          &53.46\%& 36.46\% & 9.25\%&0.79\%&0.04\%\\
+  \multirow{2}{*}{KDDTest+} & \multirow{2}{*}{22544} & 9711 & 7636 & 2423 & 2574 & 200\\
+                            &                           & 43.08\% & 33.87\%& 10.74\%& 11.42\%&0.89\%\\
+  \multirow{2}{*}{KDDTrain+20\%} & \multirow{2}{*}{25192} & 13449 & 9234 & 2289 & 209 & 11\\
+                                 &                      & 53.39\% & 36.65\%& 9.09\%& 0.83\%&0.04\%\\
+  \bottomrule
+  \end{tabular}
+\end{table}
+
+图~\ref{fig:kddtraindistribution}~、~\ref{fig:kddtestdistribution}~分别是完整训练集与测试集中各种流量分布占比饼状图。
+\begin{figure}[htbp]
+  \centering
+  \subcaptionbox{训练集\label{fig:kddtraindistribution}}[0.4\textwidth]{
+  \includegraphics[width=0.4\textwidth]{kddtraindistribution.png}
   }
   \hspace{36pt}
-  \subcaptionbox{数据包空间利用率\label{fig:space_utilization}}[0.44\textwidth]{
-  \includegraphics[width=0.46\textwidth]{space_utilization.png}
+  \subcaptionbox{测试集\label{fig:kddtestdistribution}}[0.4\textwidth]{
+  \includegraphics[width=0.4\textwidth]{kddtestdistribution.png}
   }
-  \caption{数据包空间开销即利用率与组大小关系}
+  \caption{NSL-KDD完整数据集分类占比饼状图}
 \end{figure}
-图~\ref*{fig:packet_overhead}~展示了本文所提方案与PPM方案在数据包标记空
-间开销方面的对比结果。本文所提方案进行路由标记所需的空间与组大小m成正比。当m小
-于4时，IGPPM产生的空间开销低于PPM。图~\ref*{fig:space_utilization}~则展示了标记空间利用率方面的对比结果。
-利用率是指单个数据包中标记的路由数量与数据包标记空间开销的比率。可以观察到，与
-PPM方案相比，我们的方案具有更高的空间利用率，这显著提高了方案的路由回溯能力。
+
+通过以上图表可知数据集中不同攻击类型的数据分布不均衡，特别是U2R和R2L攻击类型的样本数量远少于其他类型。
+这种不平衡分布对于训练入侵检测系统模型来说是一个挑战，因为模型可能会在较多样本的攻击类型上表现更好，而在样本较少的攻击类型上表现不佳。
+此外，从KDDTrain+到KDDTest+，攻击类型的分布变化表明，测试集可能代表了与训练集不同的攻击环境，这要求模型具备良好的泛化能力，以适应不同的攻击行为和模式。
+
+\subsection{实验设计}
+% 本文首先使用UNSW-NB15作为旧任务数据集对模型进行训练。
+% 并利用NSL-KDD作为新任务数据集，并改变模型输入输出结构使其适合兼容这两个数据集的特征。
+% 之后采取批量（每批设定读取1,200个样本，1000个样本作为训练集，200个样本作为测试集）读取的方式对模型进行增量学习,同时记忆集的大小与每批量中的训练集大小保持一致也设置为1,000。
+% 并观测每批量测试后模型的表现效果。
+
+本文首先使用UNSW-NB15作为旧任务数据集，并将其划分为训练集和测试集。
+具体而言，我们选取数据集中的80\%作为训练集，用于训练模型以获取基本的网络攻击检测能力；剩余的20\%则作为测试集，用于初步评估模型的性能。
+随后，我们直接利用NSL-KDD提供的训练集文件中的数据作为新任务数据集，同时采用NSL-KDD提供的测试集文件中的数据作为我们的测试集。
+为了进行增量学习，我们采用批量读取的方式处理新任务数据集。
+每个增量学习阶段设定读取1,000个样本，同时设定记忆集的大小与每阶段训练集的大小保持一致，均为1,000。
+在增量学习的每个批次中，我们都进行100轮的训练，以确保模型能够充分学习当前批次的数据。
+\subsection{实验结果与分析}
+为验证本文方案进行增量学习后的效果，我们选取了一系列模型，包括DT（决策树）、LR（逻辑回归）、KNN（K近邻）、NB（朴素贝叶斯）、Ada（AdaBoost增强）、ResN（残差神经网络）、BiG（双向门控循环单元）、RNB-NMF（未经多模态特征融合的残差神经网络与双向门控循环单元）、RNB-MF（经过多模态特征融合的残差神经网络与双向门控循环单元）、RNB-MF with iCaRL（基于iCaRL的RNB-MF模型），以及RNB-MF with iCaRL and GA（结合了遗传算法记忆集抽样优化的RNB-MF with iCaRL模型），并对这些模型进行了增量学习实验。
+当所有新任务训练集的内容学习完成后，我们将新任务测试集与旧任务测试集进行合并，用以评估各模型在混合数据集上的性能。\par
+
+图~\ref{fig:acc_icarl}展示了各个模型在新任务测试集上的准确率表现。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{icarl_accuracy.png}
+  \caption{增量学习后模型在新旧任务测试集上准确率对比柱状图}
+  \label{fig:acc_icarl}
+\end{figure}
+从图中可以明显看出，引入iCaRL策略后，模型的准确率得到了显著提升。
+这一结果充分证明了iCaRL策略在保持模型对旧知识记忆的同时学习新知识的有效性。
+特别值得注意的是，本文提出的基于遗传算法的记忆集抽样优化方法在iCaRL的基础上进一步提高了RNB-MF模型的准确率。
+这表明该方法能够有效保留模型的记忆能力，提升其在增量学习过程中的性能。
+然而，对于其他模型如DT、LR、KNN、NB和Ada，在进行增量学习后面对新任务数据集与旧任务数据集的混合测试集时表现并不理想。
+这可能是因为这些模型在学习新知识的过程中，容易遗忘旧知识，导致在混合测试集上的性能下降。
+下面的实验是对这一问题的具体验证。   
+
+图~\ref{fig:acc_forget}是每十个增量学习阶段后模型在旧任务数据集上的准确率变化。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{forget.png}
+  \caption{增量学习后模型在旧任务数据集上的准确率下降对比柱状图}
+  \label{fig:acc_forget}
+\end{figure}
+\par
+从图中可以看出，没有结合iCaRL策略的模型在经过增量学习后，其准确率迅速下降，
+而结合了iCaRL策略的RNB-MF模型则能够较好地保持准确率，最终模型的准确率保持在70\%以上。
+这表明模型在没有采取额外策略的情况下学习新知识会导致对旧知识的遗忘。
+特别值得一提的是，当使用本文所提出的基于遗传算法的记忆集抽样优化策略后，模型的准确率仍能得到进一 步的提升。
+% 这表明了本文提出的基于遗传算法的记忆集抽样优化策略在增强模型增量学习表现方面具有积极作用。
+这表明了本文提出的记忆集抽样优化策略能有效增强模型的增量学习效果。
+
 \section{本章小结}
-\label{sec:otherparts}
-在网络通信中，由于缺乏IP地址验证机制，攻击者可以冒充其他用户，
-导致各种网络攻击，例如DoS/DDoS攻击，并可能引发其他损害目标主
-机声誉和利益的恶意活动。因此，IP地址跟踪解决方案变得至关重要。
+在本章中，我们提出了一种创新性的多模态特征融合模型，该模型基于残差网络与双向门控循环单元，旨在提升传统网络攻击检测技术的准确性。
+通过在实验数据集上与多种经典机器学习和深度学习模型进行详尽的对比分析，我们的模型展现出了显著的性能优势。
+为了进一步应对不断变化的网络攻击环境带来的挑战，我们基于iCaRL技术，设计了一种基于多模态特征融合的增量学习方案。
+这一方案旨在确保模型在维持对原有网络攻击的高效识别能力的同时，不断适应并学习新型的网络攻击模式。
+通过持续的学习，我们的模型能够更好地应对不断变化的网络环境，提升整体的安全防护能力。
+此外，我们针对增量学习过程中使用的记忆集，提出了一种基于遗传算法的抽样优化方法。
+通过这一方法，我们能够更加高效地利用有限的资源，提升增量学习的效率和准确性。
+在实验中，我们以UNSW-NB15与NSL-KDD分别作为新旧数据集，与多种经典机器学习和深度学习模型进行了对比分析。
+实验结果表明，我们的增量学习方案能够显著增强模型的学习能力，实现了对旧知识的有效保留和新知识的快速学习。
+% 为验证本文方案进行增量学习的效果，利用ResNet、RNM-NMF、RNB-MF with iCaRL(基于iCaRL的RNB-MF模型)以及RNB-MF with iCaRL and GA(基于遗传算法记忆集抽样优化的RNM-MF with iCaRL)增量学习完所有批次的数据后利用训练好的模型在新任务测试集上进行了准确率测试。
+% 图~\ref{icarl_acc.png}~是各个模型在新任务测试集上的准确率表现，我们可以看到，集合了iCaRL策略后模型的准确率有了很大的提升。
+% 另外，经过对记忆集的抽样优化后，对模型的准确率有一定的提升。
+% 说明本文提出的基于遗传算法记忆集抽样优化策略能够提高模型的增量学习表现。
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=0.8\textwidth]{forget.png}
+%   \caption{增量学习后模型在旧任务数据集上的准确率下降对比柱状图}
+%   \label{fig:acc_forget}
+% \end{figure}
+% 图~\ref{fig:acc_forget}~反映了每十个增量学习阶段后模型在旧任务数据集上的准确率。
+% 可以发现没有结合iCaRL策略的模型经过增量学习后准确率极速下降，说明模型在学习新知识时很快的遗忘掉旧知识。
+% 而结合了iCaRL策略的模型能够很好的保留准确率，最终模型的准确率保持在70\%以上，并且使用了本文所提方案的记忆集抽样优化测率后模型的准确率仍能得到小幅度的提升。
+% \section{数据预处理}
+% 数据预处理是深度学习或机器学习一个至关重要的步骤，
+% 进行数据预处理的目的是制作出一个干净、标准化、均衡的数据集，为特征学习和后续的模型训练打下坚实的基础。
+% 正确的数据预处理策略可以显著提高模型的性能，加快训练速度，并提高模型在未见数据上的泛化能力。
+% 本文在数据预处理阶段采取了综合性的方法论，旨在优化模型的学习效率和性能。\par
 
-尽管概率包标记法作为一种能够进行路由回溯的有效方法，并且具备自动回溯的能力
-，但这种方法都有一定的缺点：使用IP地址作为标记信息来对单个路由器进行标记，
-这将导致标记空间利用率低、路径重建过程需要收集的数据包数量大，并且不能直接提供有序的攻击路径。
+% 首先，对训练集和测试集执行特征编码，以便将分类数据转换为模型可处理的格式。
+% 随后，本研究针对原始数据集及特征编码过程中可能产生的缺失值进行了细致的处理，确保数据的完整性。
+% 在完成上述步骤后，进一步通过特征选择技术降低数据维度，这一步骤旨在剔除冗余或不相关的特征，从而提高模型训练的效率并可能提升模型的泛化能力。
+% 此外，对特征选择后的数据进行标准化处理，确保所有特征都在相同的尺度上，进一步促进模型学习。
+% 鉴于本文采用增量学习策略以及数据集呈现显著的不平衡性，本文将会对数据集进行分层抽样优化，以期在训练过程中实现更为均衡的类别表示和提升模型对少数类的识别能力。\par
 
-因此，本文介绍了IGPPM方案，该方案利用路由器接口编号的局部
-唯一性及其与IP地址相比相对较小的空间要求实现了IGPPM在单
-个数据包上携带更多的路由器标记信息。此外，通过对异或特性
-的有效使用，当收集到足够的数据包以实现路径覆盖时，IGPPM可以
-直接提供有序的攻击路径。
+% 图~\ref{fig:dataprocess}~概括性地展示了整个数据预处理和模型训练的流程。
+% 本节接下来的部分将对这一流程中的关键步骤进行详细阐述，以便于读者深入理解本研究采取的方法论及其背后的逻辑。
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width = 0.8\textwidth]{dataprocess.drawio.png}
+%   \caption{数据集预处理流程图}
+%   \label{fig:dataprocess}
+% \end{figure}
 
-最后，本文通过理论分析和实验比较表明，与传统的PPM的方案相比，我们的方法显著减少了在路由回溯过程中达到收敛状态所需的数据包数量，提高了回溯效率。
+% \subsection{特征编码}
+% \begin{table}[htbp]
+%   \caption{One-hot编码算法实现}
+%   \label{tab:onehot}
+%   \centering
+%   \begin{tabularx}{1.0\textwidth}{cl}
+%   \toprule
+%   \multicolumn{2}{l}{\textbf{one-hot编码算法}}\\
+%   \midrule
+%   \multicolumn{2}{l}{\textbf{输入}: 数据集 $D$，其中包含数值型和分类型列} \\ 
+%   \multicolumn{2}{l}{\textbf{输出}: 经过One-hot编码的数据集 $D'$} \\
+%   1& 初始化一个空的数据集 $D'$ \\
+%   2& \textbf{for} 每一列 $col$ \textbf{in} $D$: \\
+%   3&\quad \textbf{if} $col$ 是分类型: \\
+%   4&\quad\quad $unique\_values$ = 获取 $col$ 的所有唯一值 \\
+%   5&\quad\quad \textbf{for} 每一个值 $val$ \textbf{in} $unique\_values$: \\
+%   6&\quad\quad\quad 创建一个新列 $new\_col$，名称为 ``$col\_val$''\\
+%   7&\quad\quad\quad \textbf{for} 每一行 $row$ \textbf{in} $D$: \\
+%   8&\quad\quad\quad\quad \textbf{if} $row[col] == val$: \\
+%   9&\quad\quad\quad\quad\quad 在 $D'[new\_col]$ 中填充 1 \\
+%   10&\quad\quad\quad\quad \textbf{else}: \\
+%   11&\quad\quad\quad\quad\quad 在 $D'[new\_col]$ 中填充 0 \\
+%   12&\quad \textbf{else}: \\
+%   13&\quad\quad 将 $col$ 直接复制到 $D'$ 中 \\
+%   14&\textbf{return} $D'$ \\ 
+%   \bottomrule
+%   \end{tabularx}
+%   \end{table}
+% 特征编码是一种数据预处理方法，用于将原始数据转换为机器学习算法能够理解和处理的格式。
+% 这个过程对于提高模型的性能和准确性至关重要，因为大多数机器学习算法预期输入数据为数值型，而原始数据往往包括各种类型，如文本、日期或分类数据。
+% 特征编码操作的目的便是将非数值特征转换为数值形式，使算法能够对这些数据进行计算。
+% 因为我们的流量数据集中也存在着许多非数值类型的特征，所以我们这里也需要对数据集进行特征编码，将非数值类型转为数值类型。\par
+
+% One-Hot 编码是一种特殊且广泛使用的特征编码方法，它易于理解和实现，非常适用于处理具有有限类别的分类数据。
+% 因此我们这里将选用，one-hot编码方法进行特征编码。
+% 这种编码方法通过为每个类别创建一个新的二进制列来工作。
+% 对于每个数据点，它所属的类别的列被标记为1，而所有其他列被标记为0。
+% 表~\ref{tab:onehot}~是本文采用one-hot编码对数据集进行特征编码的具体算法。
+
+
+% \subsection{特征选择阶段}
+% 在数据预处理阶段，特征选择扮演了至关重要的角色，其核心目标是从原始数据集中挑选出对预测目标变量有显著贡献的特征。
+% 这一过程对于降低模型复杂度、加快训练速度以及提升模型性能至关重要，原因在于它能有效去除数据中的噪声和不相关特征。
+% 通过实施有效的特征选择，不仅可以减轻过拟合的风险，还能增强模型对新数据的泛化能力。
+
+% 为了实现这一目标，本研究采用遗传算法对特征选择过程进行优化。
+% 遗传算法，作为一种启发式搜索算法，受到生物进化机制的启发，通过模拟自然选择、遗传、变异等过程来解决优化问题。
+% 本文在第~\ref{eq:GA}~章已详细介绍了遗传算法的理论基础，因此此处不再展开，而是直接进入具体的实施细节。\par
+
+% (1) 遗传算法的选择\par
+% 遗传算法的种类以及策略多种多样,在这里我们选择采用稳态遗传算法（Steady State Genetic Algorithm, SSGA）作为优化策略。
+% 与传统的遗传算法相比，稳态遗传算法的特点在于每次迭代只替换种群中的一小部分个体，而不是进行全种群的更新。
+% 这种方法的优势在于绝大多数个体在迭代过程中保持不变，从而避免了每次迭代都进行完整的种群更换。\par
+
+% 考虑到本文中个体适应度评估的复杂性——每个个体的评估需要经过完整的模型训练及性能评估过程——采用标准遗传算法（即采用完全生成替换策略的遗传算法，其中每次迭代都替换整个种群）将显著增加计算负担，并可能不利于优良基因的保留。
+% 相反，稳态遗传算法通过每次只替换部分种群的策略，不仅大幅度降低了计算量，而且有助于保持种群中的优秀个体。
+% 这种策略的实施有助于加速算法的收敛过程，并且，通过有效地保留高质量的解，稳态遗传算法能够在全局搜索和局部搜索之间取得更好的平衡，从而提高发现全局最优解的可能性。
+
+% (2) 染色体编码\par
+
+% 遗传算法的每个个体（或称为“染色体”）代表一种可能的特征子集选择方案，其中包含了样本每个特征的选择情况。
+% 本文将利用二进制编码的方案对特征进行选择，染色体种的每一个基因（即：1bit位）位对应样本的一个特征位。
+% 基因值代表该特征位的选择情况，例如一条染色体的前5位基因分别为{0,1,0,1,1},则代表样本中第二位以及第四、五位的特征要被选择，而第一、三位则被忽略掉。
+% 下表~\ref{tab:Ga_code}~是这一过程的对应情况。
+% 在本方案中，由于样本的特征数量有限，一条染色体的基因数量可以由特征数量决定，通过这样的方法能够选出一组最优特征子集。
+
+% 在遗传算法中，每个个体（也称作“染色体”）代表了一种潜在的特征选择方案，通过对样本中每个特征是否被选中的表示来体现。
+% 为了实现这一表示，本文采用了二进制编码策略，其中染色体上的每个基因（即1位二进制数）对应于样本的一个特征。
+% 在此方案下，染色体的基因数量直接对应于特征的总数。
+% 基因的值（0或1）指示相应特征是否被选中：1表示选择该特征，而0表示忽略该特征。
+% 例如，假设某个染色体的前五个基因位为{0,1,0,1,1}，这表示选择样本中的第二、第四和第五个特征，而第一和第三个特征则被排除。
+% 表~\ref{tab:Ga_code}~是这一过程的对应情况。
+
+% \begin{table}
+%   \caption{遗传算法编码方案}
+%   \label{tab:Ga_code}
+%   \centering
+%   \begin{tabular}{cccccc}
+%     \toprule
+%     \textbf{编码值(基因)}&0&1&0&1&1\\
+%     \midrule
+%     \textbf{特征}&duration&protocol\_type&service&flag&src\_bytes\\
+%     \textbf{选择}&$\times$&\checked&$\times$&\checked&\checked\\
+%     \bottomrule
+%   \end{tabular}
+% \end{table}
+
+
+% \begin{table}[htbp]
+%   \caption{遗传算法实现}
+%   \label{tab:genetic_algorithm}
+%   \centering
+%   \begin{tabularx}{1.0\textwidth}{cl}
+%   \toprule
+%   \multicolumn{2}{l}{\textbf{遗传算法}}\\
+%   \midrule
+%   \multicolumn{2}{l}{\textbf{输入}: 种群大小 $P$，基因数量 $G$，代数 $N$，变异率 $M$} \\
+%   \multicolumn{2}{l}{\textbf{输出}: 适应度最高的染色体} \\
+%   1& 初始化种群 $pop$ \\
+%   2& \textbf{for} 每一代 \textbf{in} $N$: \\
+%   3&\quad 选择两个父代 $p1$ 和 $p2$ \\
+%   4&\quad 生成两个后代 $c1$ 和 $c2$ 通过 $crossover(p1, p2)$ \\
+%   5&\quad 对 $c1$ 和 $c2$ 进行 $mutate$ 操作 \\
+%   6&\quad 将 $c1$ 和 $c2$ 加入到 $pop$ 中 \\
+%   7&\quad 计算种群中每个个体的适应度： \\
+%   7&\quad\quad\quad\quad 根据染色体编码进行特征选择 \\
+%   7&\quad\quad\quad\quad 训练模型 \\
+%   7&\quad\quad\quad\quad 评估模型，取得适应度\\
+%   8&\quad 根据适应度计算每个个体的淘汰概率 \\
+%   9&\quad 淘汰两个适应度最低的个体 \\
+%   10& \textbf{return} 适应度最高的染色体 \\
+%   \bottomrule
+%   \end{tabularx}
+% \end{table}
+% (3) 适应度评估\par
+% 本文将会把数据集分为训练集和验证集，根据染色体中的特征选择情况对数据集进行处理并对所有待提升的模型进行训练。
+% 模型得出的验证结果将作为适应度评估值。并使用weighted avg f1-score(公式~\ref{eq:val_score5}~)作为评价标准。
+% 这里没有选用accuracy\_score而选用weighted avg f1-score的原因是
+% accuracy\_score 虽然简单直观，易于理解但在在类别不平衡的数据集中可能会产生误导。
+% 例如，如果一个类占95\%的样本，模型总是预测这个主要类别，那么准确率可能达到95\%，但这并不意味着模型具有良好的性能。
+% 而weighted avg f1-score 计算精确度（precision）和召回率（recall）的调和平均，对于每个类别分别计算F1分数，并根据每个类别的样本数（support）进行加权平均。
+% 因此weighted avg f1-score能够综合考虑精确度、召回率以及样本类别数量，即使数据集处于不平衡的情况，也能很好地反映模型的性能。\par
+
+% (4) 初始群体生成及迭代次数\par
+% 为了确保算法能够充分探索解空间并增加解的多样性，我们特别注重初代种群的广泛性和迭代过程的深入性。
+% 基于此目的，初始种群规模被设定为1,000个个体。
+% 这一较大的初始种群规模有助于覆盖更广泛的解空间，从而提高找到全局最优解的概率。
+% 同时，为了充分优化解并观察算法的收敛行为，设置了10,000次的迭代次数,以便于算法有足够的时间逐步改进解，并最终接近最优解。\par
+
+
+
+% (5) 选择、交叉和变异\par
+% 对于选择策略，本文采用轮盘赌选择法，该方法根据个体适应度相对于总体适应度的比例来分配选择概率。
+% 这种方法的优势在于能够有效保证高适应度个体被优先选择，从而引导种群朝着更优解空间方向进化。
+% 在交叉操作方面，为了降低计算的复杂度，本文选择了单点交叉方法。
+% 对于变异策略，本研究设置了0.1的固定概率对新生成的个体中的所有基因进行变异。
+
+% 表~\ref{tab:genetic_algorithm}~是我们遗传算法实现的伪代码。
+
+
+
+% \section{特征学习阶段}
+
+% \section{实验评估与分析}
+% \subsection{数据集介绍}
+% \textbf{NSL-KDD数据集\cite{revathi2013detailed}}\par
+% KDD Cup 99数据集\cite{tavallaee2009detailed}曾长期被视为网络入侵检测研究的标准化数据集。
+% 然而，该数据集存在一些显著的局限性，例如庞大的数据量和大量的冗余记录，这些因素共同导致了模型训练和测试的效率低下。
+% 为了解决这些问题并提高研究效率，NSL-KDD数据集应运而生，它在网络安全领域得到了广泛的应用和认可。
+
+
+% NSL-KDD数据集的设计考虑到了消除冗余性、改善平衡性、增加多样性和扩展适用性。
+% 通过从原始的KDD Cup 99数据集中移除冗余记录，NSL-KDD显著减少了数据量，从而使得模型和算法能够在较短的时间内完成训练，同时降低了因数据冗余可能引入的偏差风险。
+% 尽管NSL-KDD并未完全解决数据类别不平衡的问题，但相较于其前身，它在一定程度上减轻了这一问题，为研究人员提供了一个更加平衡的数据环境。
+
+
+% NSL-KDD数据集由41个特征组成，整体包括八个文件，分成四组数据，每组提供了两种格式：文本（.txt）和属性关系文件格式（.arff）。
+% 这些文件的详细描述如下表~\ref{tab:NSLKDDFile}~。
+% \begin{table}[htbp]
+%   \caption{NSL-KDD数据集各文件介绍}
+%   \label{tab:NSLKDDFile}
+%   \begin{tabularx}{\textwidth}{cXc}
+%     \toprule
+%     \textbf{文件名} & \textbf{描述} & \textbf{记录总数}\\
+%   \midrule
+%     KDDTrain+.ARFF & 完整的NSL-KDD训练集以二进制标签的ARFF格式提供 &125973\\
+%     KDDTrain+.TXT & 完整的NSL-KDD训练集，包括攻击类型标签和难度级别，以CSV格式提供&125973\\
+%     KDDTrain+20Percent.ARFF & KDDTrain+.arff文件的20\%子集&25192\\
+%     KDDTrain+20Percent.TXT & KDDTrain+.txt文件的20\%子集 &25192\\
+%     KDDTest+.ARFF & 完整的NSL-KDD测试集以二进制标签的ARFF格式提供 &22544\\
+%     KDDTest+.TXT & 完整的NSL-KDD测试集，包括攻击类型标签和难度级别，以CSV格式提供 & 22544\\
+%     KDDTest-21.ARFF & 不包含难度级别为21的记录的KDDTest+.arff文件的子集 &11850\\
+%     KDDTest-21.TXT & 不包含难度级别为21的记录的KDDTest+.txt文件的子集&11850 \\
+%   \bottomrule
+%   \end{tabularx}
+% \end{table}
+
+% NSL-KDD数据集中包含的攻击流量可分为拒绝服务攻击（DoS）、远程到本地攻击（R2L）、用户到根攻击（U2R）以及探测攻击（Probe）共四种类别。
+% 如表~\ref{tab:attack_class}~所示，这四种类别又可细分为39种子类型。
+% 表~\ref{tab:kdd_distribution}~则展示四种类别的攻击流量与正常流量在数据集中的分布占比。
+% 图~\ref{fig:kddtraindistribution}~、~\ref{fig:kddtestdistribution}~分别是完整训练集与测试集中各种流量分布占比饼状图。
+
+
+% 通过以上图表可知数据集中不同攻击类型的数据分布不均衡，特别是U2R和R2L攻击类型的样本数量远少于其他类型。
+% 这种不平衡分布对于训练入侵检测系统模型来说是一个挑战，因为模型可能会在较多样本的攻击类型上表现更好，而在样本较少的攻击类型上表现不佳。
+% 此外，从KDDTrain+到KDDTest+，攻击类型的分布变化表明，测试集可能代表了与训练集不同的攻击环境，这要求模型具备良好的泛化能力，以适应不同的攻击行为和模式。
+
+
+% \begin{table}[htbp]
+%   \caption{NSL-KDD数据集中每种攻击的不同子类的细分}
+%   \label{tab:attack_class}
+%   \begin{tabularx}{\textwidth}{@{}ccX@{}}
+%   \toprule
+%     \multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{子类}}\\
+%   \midrule
+%     DoS & 11 & apache2, back, land, neptune, mailbomb, pod, processtable, smurf, teardrop, dupstorm, worm\\
+%     Probe & 6 & ipsweep, mscan, nmap, portsweep, saint, satan\\
+%     U2R & 7 & buffer\_overflow, loadmodule, perl, ps, rootkit, sqlattack, xterm\\
+%     R2L & 15 & ftp\_write, guess\_passwd, httptunnel, imap, multihop, named, phf, sendmail, snmpattack, spy, snmpguess, warezclient, warezmaster, xlock, xsnoop\\
+%   \bottomrule
+%   \end{tabularx}
+% \end{table}
+
+% \begin{table}[htbp]
+%   \caption{每种攻击类型的数据分布}
+%   \label{tab:kdd_distribution}
+%   \centering
+%   \begin{tabular}{ccccccc}
+%   \toprule
+%   \textbf{数据集} & \textbf{总数} & \textbf{Normal} & \textbf{DoS} & \textbf{Probe} & \textbf{R2L} & \textbf{U2R}\\
+%   \midrule
+%   \multirow{2}{*}{KDDTrain+} & \multirow{2}{*}{125973} & 67343 & 45927 & 11656 & 995  & 52   \\
+%                              &                          &53.46\%& 36.46\% & 9.25\%&0.79\%&0.04\%\\
+%   \multirow{2}{*}{KDDTest+} & \multirow{2}{*}{22544} & 9711 & 7636 & 2423 & 2574 & 200\\
+%                             &                           & 43.08\% & 33.87\%& 10.74\%& 11.42\%&0.89\%\\
+%   \multirow{2}{*}{KDDTrain+20\%} & \multirow{2}{*}{25192} & 13449 & 9234 & 2289 & 209 & 11\\
+%                                  &                      & 53.39\% & 36.65\%& 9.09\%& 0.83\%&0.04\%\\
+%   \bottomrule
+%   \end{tabular}
+% \end{table}
+
+%   \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width = 0.8\textwidth]{kddtraindistribution.png}
+%     \caption{NSL-KDD完整训练集分类占比饼状图}
+%     \label{fig:kddtraindistribution}
+%   \end{figure}
+
+%   \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width = 0.8\textwidth]{kddtestdistribution.png}
+%     \caption{NSL-KDD完整测试集分类占比饼状图}
+%     \label{fig:kddtestdistribution}
+%   \end{figure}
+
+% \subsection{实验环境}
+% 为了评估本文所提方案的有效性，本文将利用python语言来实现以上流程，并选用表~\ref{tab:env_setting}~中的配置来进行实验。
+% \begin{table}[htbp]
+%   \caption{实验设备配置}
+%   \label{tab:env_setting}
+%   \centering
+%   \begin{tabular}{ccc}
+%     \toprule
+%     \textbf{环境类别} & \textbf{设备项目} & \textbf{项目参数}\\
+%     \midrule
+%     \multirow{6}{*}{硬件环境}& CPU型号 & Intel(R) Core(TM) i7-11800H\\
+%                             & CPU规格 & 8核16线程@2.30GHz\\
+%                             & GPU型号 & NVIDIA GeForce RTX 3060 Laptop GPU\\
+%                             & 内存大小& 16.0 GB\\
+%                             & 硬盘类型& SSD\\
+%                             & 硬盘大小& 1TB\\
+%                             \hline
+%     \multirow{3}{*}{软件环境}&操作系统&Windows 11\\
+%                             &开发语言&Python 3.11.7\\
+%                             &编辑器 &Visual Studio Code\\                       
+%     \bottomrule
+%   \end{tabular}
+% \end{table}
+
+% \subsection{评估指标}
+% 本文主要使用准确度 (Accuracy)、精确度 (Precision)、召回率 (Recall)、F1 分数 (F1 Score)、宏平均 F1 分数 (Macro Averaged F1 Score)、
+% ROC-AUC 分数 (ROC-AUC Score)、混淆矩阵 (Confusion Matrix)这7个评价指标对我们的方案进行全方位的评估。以下是这7个指标的简单介绍。\par
+% (1) 准确度\par
+% 表示模型正确预测的比例，是所有正确预测的数量除以总预测数量。
+% \begin{equation}
+%   \label{eq:val_score1}
+%   Accuracy = \frac{Number of Correct Predictions}{Total Number of Predictions} = \frac{TP + TN}{TP + TN + FP + FN}
+% \end{equation}
+
+% (2) 精确度\par
+% 简称精度，也称为查准率，是所有模型预测为正类的样本中，实际为正类的比例。
+% \begin{equation}
+%   \label{eq:val_score2}
+%   Precision = \frac{TP}{TP + FP}
+% \end{equation}
+
+% (3) 召回率\par
+% 召回率，也称为真正率、查补率，是模型正确识别为正类的样本占所有实际正类样本的比例。
+% \begin{equation}
+%   \label{eq:val_score3} 
+%   Recall = \frac{TP}{TP + FN}
+% \end{equation}
+
+% (4) F1 分数\par
+% F1 分数是精确度和召回率的调和平均，用于衡量模型的精确度和召回率的平衡程度。
+% \begin{equation}
+%   \label{eq:val_score4}
+%   F1 = 2 \times \frac{Precision \times Recall}{Precision + Recall} = \frac{2TP}{2TP + FP + FN}
+% \end{equation}
+
+% (5) 加权平均 F1 分数\par
+% 加权平均F1分数是一种性能评估指标，通过根据每个类别的样本量对其F1分数进行加权平均，以反映所有类别的整体性能。
+% 每个类别的重要性通过其在数据集中的相对比例来确定。
+
+% \begin{equation}
+%   \label{eq:val_score5}
+%   F1_{weighted} = \sum\limits_{i=1}^{N} w_i \cdot F1_i
+% \end{equation}
+% \begin{flushleft}
+%   \renewcommand\arraystretch{1.25}
+%   \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
+%   式中& $\symbf{F1_{weighted}}$ &加权平均F1分数；\\
+%   &  $\symbf{N}$&类别总数；\\
+%   &  $\symbf{F1_i}$ &第$i$个类别的F1分数\\
+%   &  $\symbf{w_i}$ & 第$i$个类别的权重，通常由该类别的样本数量占总样本数量的比例确定。\\
+%   \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
+%   \end{flushleft}
+
+% (6) 混淆矩阵\par
+% 混淆矩阵是一种特定的表格布局，用于可视化模型性能，显示实际类别与模型预测类别之间的关系。
+% \begin{equation}
+%   \label{eq:val_score6}
+%   Confusion Matrix = \begin{bmatrix} TP & FP \\ FN & TN \end{bmatrix}
+% \end{equation}
+
+% (7) ROC-AUC 分数\par
+% ROC-AUC 分数是接收者操作特征（ROC）曲线下面积的度量，用于评估分类器的预测能力。
+% \begin{equation}
+%   \label{eq:val_score7}
+%   AUC = \int_{0}^{1} TPR(FPR) \, d(FPR)
+% \end{equation}
+
+% 以上七个式\ref{eq:val_score1}、\ref{eq:val_score2}、\ref{eq:val_score3}、\ref{eq:val_score4}、\ref{eq:val_score5}、\ref{eq:val_score6}、\ref{eq:val_score7}中,
+%   $TP$(True Positives)表示正确地将正类预测为正类;
+%   $TN$(True Negatives)表示正确地将负类预测为负类；
+%   $FP$(False Positives)表示错误地将负类预测为正类；
+%   $FN$(False Negatives)表示错误地将正类预测为负类。
+
+
+% 在~\LaTeX~中应用最多的图片格式是~EPS（Encapsulated PostScript）格式，它是一种
+% 专用的打印机描述语言，常用于印刷或打印输出。EPS~格式图片可通过多种方式生成，
+% 如果使用命令行界面，则可以用 ImageMagick，可将其它格式图片转换为~EPS~格式图
+% 片，同时还可以锐化图片，使图片的局部清晰一些。
+
+% ImageMagick 包含多个命令行程序,其中最常用的是 \texttt{convert}。
+% \begin{shell}
+% convert [可选参数] 原文件名.原扩展名 新文件名.eps
+% \end{shell}
+
+% 除此之外，一些文字处理软件和科学计算软件也支持生成~EPS~格式的文件，可用“另存
+% 为”功能查看某款软件是否能够将图片以~EPS~格式的形式保存。
+
+% \subsection{插入单幅图形}
+
+% 插图通常需要占据大块空白，所以在文字处理软件中用户经常需要调整插图的位置。
+% \LaTeX~有一个 \texttt{figure} 环境可以自动完成这样的任务，这种自动调整位置的环
+% 境称作浮动环境(float)，之后还会介绍表格浮动环境。
+
+% 单张图片插入形式如图~\ref{fig:golfer}~所示。
+% \begin{figure}[htbp]
+% \centering
+% \includegraphics[width = 0.3\textwidth]{golfer}
+% \caption{打高尔夫球的人}
+% \label{fig:golfer}
+% \end{figure}
+
+% \begin{latex}
+% \begin{figure}[htbp]
+% \centering
+% \includegraphics[width=0.3\textwidth]{golfer}
+% \caption{打高尔夫球的人}
+% \label{fig:golfer}%应放在\caption{}之后，否则引用时指向的是前一个插图
+% \end{figure}
+% \end{latex}
+
+% 上述代码中，\verb|[htbp]| 选项用来指定插图排版的理想位置，这几个字母分别代表
+% ~here、top、bottom、float page，也就是固定位置、页顶、页尾、单独的浮动页。可
+% 以使用这几个字母的任意组合，一般不推荐单独使用 \verb|[h]|。如果要强制固定浮动
+% 图形的位置，还可以用 \textbf{float} 宏包的 \verb|[H]| 选项。
+
+% \subsection{插入多幅图形}
+
+% \subsubsection*{并排摆放，共享标题}
+
+% 当我们需要两幅图片并排摆放，并共享标题时，可以在 \texttt{figure} 环境中使用两个
+% \begin{latex}
+% \includegraphics{}
+% \end{latex}
+% 命令，如图~\ref{fig:fanqingfuming}~所示。
+
+% \begin{latex}
+% \begin{figure}[htbp]
+% \centering
+% \includegraphics[width=0.3\textwidth]{qingming}
+% \hspace{36pt}
+% \includegraphics[width=0.3\textwidth]{fanfu}
+% \caption{反清复明}
+% \label{fig:fanqingmuming}
+% \end{figure}
+% \end{latex}
+
+% \begin{figure}[htbp]
+% \centering
+% \includegraphics[width=0.3\textwidth]{qingming}
+% \hspace{36pt}
+% \includegraphics[width=0.3\textwidth]{fanfu}
+% \caption{反清复明}
+% \label{fig:fanqingfuming}
+% \end{figure}
+
+% \subsubsection*{并排摆放，各有标题}
+
+% 如果想要两幅并排的图片各有自己的标题，可以在 \texttt{figure} 环境中使用两个
+%  \texttt{minipage} 环境，每个环境里插入一个图，如图~\ref{fig:qingming}~和
+% ~\ref{fig:fanfu}~所示。
+
+% \begin{latex}
+% \begin{figure}[htbp]
+% \centering
+% \begin{minipage}[t]{0.3\textwidth}
+%     \centering
+%     \includegraphics[width=\textwidth]{qingming}
+%     \caption{清明}
+%     \label{fig:qingming}
+% \end{minipage}
+% \hspace{36pt}
+% \begin{minipage}[t]{0.3\textwidth}
+%     \centering
+%     \includegraphics[width=\textwidth]{fanfu}
+%     \caption{反复}
+%     \label{fig:fanfu}
+% \end{minipage}
+% \end{figure}
+% \end{latex}
+
+% \begin{figure}[htbp]
+% \centering
+% \begin{minipage}[t]{0.3\textwidth}
+%     \centering
+%     \includegraphics[width=\textwidth]{qingming}
+%     \caption{清明}
+%     \label{fig:qingming}
+% \end{minipage}
+% \hspace{36pt}
+% \begin{minipage}[t]{0.3\textwidth}
+%     \centering
+%     \includegraphics[width=\textwidth]{fanfu}
+%     \caption{反复}
+%     \label{fig:fanfu}
+% \end{minipage}
+% \end{figure}
+
+% \subsubsection*{并排摆放，共享标题，各有子标题}
+
+% 如果想要两幅并排的图片共享一个标题，并各有自己的子标题，可以使用
+% \textbf{subcaption} 宏包提供的
+% \begin{latex}
+% \subcaptionbox{<title>}[<width>]{<insertfigure>}
+% \end{latex}
+% 命令，如图~\ref{fig:subfig_a}~和~\ref{fig:subfig_b}~所示。
+
+% \begin{latex}
+% \begin{figure}[htbp]
+%   \centering
+%   \subcaptionbox{清明\label{fig:subfig_a}}[0.3\textwidth]{
+%       \includegraphics[width=0.3\textwidth]{qingming}
+%   }
+%   \hspace{36pt}
+%   \subcaptionbox{反复\label{fig:subfig_b}}[0.3\textwidth]{
+%       \includegraphics[width=0.3\textwidth]{fanfu}
+%   }
+%   \caption{反清复明}
+% \end{figure}
+% \end{latex}
+
+% 每个子图可以有各自的引用，就象这个样子：\ref{fig:subfig_a}、
+% \ref{fig:subfig_b}。
+
+% \begin{figure}[htbp]
+% \centering
+% \subcaptionbox{清明\label{fig:subfig_a}}[0.3\textwidth]{
+%     \includegraphics[width=0.3\textwidth]{qingming}
+% }
+% \hspace{36pt}
+% \subcaptionbox{反复\label{fig:subfig_b}}[0.3\textwidth]{
+%     \includegraphics[width=0.3\textwidth]{fanfu}
+% }
+% \caption{反清复明}
+% \end{figure}
+
+% \section{表格示例}
+% \label{sec:table}
+
+% 模板中关于表格的宏包有四个：\textbf{tabularx}、\textbf{multirow}、
+% \textbf{longtable} 和\textbf{booktabs}。长表格还可以用\textbf{supertabular}，
+% 可以方便地在表格下方加入脚注。
+
+% \subsection{普通表格的绘制方法}
+
+% \texttt{table} 环境是一个将表格嵌入文本的浮动环境，其标题和交叉引用的用法类似
+% 于上一节提到的图形浮动环境 \texttt{figure}。该环境提供了最简单的表格功能，常用命令如下
+% \begin{latex}
+% \hline % 横线
+% |      % 竖线
+% &      % 分列
+% \\     % 换行
+% l c r  % 横向居中、居左、居右对齐  
+% \end{latex}
+
+% 科技文献中常使用三线表格，因此需要调用 \textbf{booktabs} 宏包，三条横线就分别
+% 用
+% \begin{latex}
+% \toprule
+% \midrule
+% \bottomrule
+% \end{latex}
+% 等命令表示。其标准格式如表~\ref{table1}~所示。
+
+% \begin{table}[htbp]
+% \caption{文献类型和标识代码}
+% \label{table1}
+% \centering
+% \begin{tabular}{cccc}
+% \toprule
+% 文献类型 & 标识代码 & 文献类型 & 标识代码\\
+% \midrule
+% 普通图书 & M &  会议录 & C\\
+% 汇编 & G & 报纸 & N\\
+% 期刊 & J & 学位论文 & D\\
+% 报告 & R & 标准 & S\\
+% 专利 & P & 数据库 & DB\\
+% 计算机程序 & CP & 电子公告 & EB\\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+
+% 绘制该表格的代码如下：
+% \begin{latex}
+% \begin{table}[htbp]
+% \caption{表格标题}
+% \label{标签名}
+% \centering
+% \begin{tabular}{cc...c}
+% \toprule
+% 表头第1个格   & 表头第2个格   & ... & 表头第n个格  \\
+% \midrule
+% 表中数据(1,1) & 表中数据(1,2) & ... & 表中数据(1,n)\\
+% 表中数据(2,1) & 表中数据(2,2) & ... & 表中数据(2,n)\\
+% ...................................................\\
+% 表中数据(m,1) & 表中数据(m,2) & ... & 表中数据(m,n)\\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+% \end{latex}
+
+% \subsection{长表格的绘制方法}
+
+% 长表格是当表格在当前页排不下而需要转页接排的情况下所采用的一种表格环境。若长
+% 表格仍按照普通表格的绘制方法来获得，其所使用的 \verb|table| 浮动环境无法实现
+% 表格的换页接排功能，表格下方过长部分会排在表格第1页的页脚以下。
+
+% \begin{longtable}{l@{\hspace{6.5mm}}l@{\hspace{5.5mm}}l}
+% \multicolumn{3}{c}{续表~\thetable\hskip1em 中国省级行政单位一览}\\
+% \toprule 名称 & 简称 & 省会或首府  \\ \midrule
+% \endhead
+% \caption{中国省级行政单位一览}
+% \label{table2}\\
+% \toprule 名称 & 简称 & 省会或首府  \\ \midrule
+% \endfirsthead
+% \bottomrule
+% \multicolumn{3}{r}{续下页}\\
+% \endfoot
+% \bottomrule
+% \endlastfoot
+% 北京市 & 京 & 北京\\
+% 天津市 & 津 & 天津\\
+% 河北省 & 冀 & 石家庄市\\
+% 山西省 & 晋 & 太原市\\
+% 内蒙古自治区 & 蒙 & 呼和浩特市\\
+% 辽宁省 & 辽 & 沈阳市\\
+% 吉林省 & 吉 & 长春市\\
+% 黑龙江省 & 黑 & 哈尔滨市\\
+% 上海市 & 沪/申 & 上海\\
+% 江苏省 & 苏 & 南京市\\
+% 浙江省 & 浙 & 杭州市\\
+% 安徽省 & 皖 & 合肥市\\
+% 福建省 & 闽 & 福州市\\
+% 江西省 & 赣 & 南昌市\\
+% 山东省 & 鲁 & 济南市\\
+% 河南省 & 豫 & 郑州市\\
+% 湖北省 & 鄂 & 武汉市\\
+% 湖南省 & 湘 & 长沙市\\
+% 广东省 & 粤 & 广州市\\
+% 广西壮族自治区 & 桂 & 南宁市\\
+% 海南省 & 琼 & 海口市\\
+% 重庆市 & 渝 & 重庆\\
+% 四川省 & 川/蜀 & 成都市\\
+% 贵州省 & 黔/贵 & 贵阳市\\
+% 云南省 & 云/滇 & 昆明市\\
+% 西藏自治区 & 藏 & 拉萨市\\
+% 陕西省 & 陕/秦 & 西安市\\
+% 甘肃省 & 甘/陇 & 兰州市\\
+% 青海省 & 青 & 西宁市\\
+% 宁夏回族自治区 & 宁 & 银川市\\
+% 新疆维吾尔自治区 & 新 & 乌鲁木齐市\\
+% 香港特别行政区 & 港 & 香港\\
+% 澳门特别行政区 & 澳 & 澳门\\
+% 台湾省 & 台 & 台北市\\
+% 北京市 & 京 & 北京\\
+% 天津市 & 津 & 天津\\
+% 河北省 & 冀 & 石家庄市\\
+% 山西省 & 晋 & 太原市\\
+% 内蒙古自治区 & 蒙 & 呼和浩特市\\
+% 辽宁省 & 辽 & 沈阳市\\
+% 吉林省 & 吉 & 长春市\\
+% 黑龙江省 & 黑 & 哈尔滨市\\
+% 上海市 & 沪/申 & 上海\\
+% 江苏省 & 苏 & 南京市\\
+% 浙江省 & 浙 & 杭州市\\
+% 安徽省 & 皖 & 合肥市\\
+% 福建省 & 闽 & 福州市\\
+% 江西省 & 赣 & 南昌市\\
+% 山东省 & 鲁 & 济南市\\
+% 河南省 & 豫 & 郑州市\\
+% 湖北省 & 鄂 & 武汉市\\
+% 湖南省 & 湘 & 长沙市\\
+% 广东省 & 粤 & 广州市\\
+% 广西壮族自治区 & 桂 & 南宁市\\
+% 海南省 & 琼 & 海口市\\
+% 重庆市 & 渝 & 重庆\\
+% 四川省 & 川/蜀 & 成都市\\
+% 贵州省 & 黔/贵 & 贵阳市\\
+% 云南省 & 云/滇 & 昆明市\\
+% 西藏自治区 & 藏 & 拉萨市\\
+% 陕西省 & 陕/秦 & 西安市\\
+% 甘肃省 & 甘/陇 & 兰州市\\
+% 青海省 & 青 & 西宁市\\
+% 宁夏回族自治区 & 宁 & 银川市\\
+% 新疆维吾尔自治区 & 新 & 乌鲁木齐市\\
+% 香港特别行政区 & 港 & 香港\\
+% 澳门特别行政区 & 澳 & 澳门\\
+% 台湾省 & 台 & 台北市\\
+% \end{longtable}
+
+% 表格~\ref{table2}~第~2~页的标题和表头是通过代码自动添加上去的。若表格在页面中
+% 的竖直位置发生了变化，其在第~2~页及之后各页的标题和表头位置能够始终处于各页的
+% 最顶部，无需调整。
+
+% \subsection{列宽可调表格的绘制方法}
+
+% 论文中能用到列宽可调表格的情况共有两种，一种是当插入的表格某一单元格内容过长
+% 以至于一行放不下的情况，另一种是当对公式中首次出现的物理量符号进行注释的情况
+% ，这两种情况都需要调用 \textbf{tabularx} 宏包。下面将分别对这两种情况下可调表格的绘制
+% 方法进行阐述。
+
+% \subsubsection{表格内某单元格内容过长的情况}
+
+% 首先给出这种情况下的一个例子如表~\ref{table3}~所示。
+
+% \begin{table}[htbp]
+% \caption{最小的三个正整数的英文表示法}
+% \label{table3}
+% \begin{tabularx}{\textwidth}{llX}
+% \toprule
+% Value & Name & Alternate names, and names for sets of the given size\\
+% \midrule
+% 1 & One & ace, single, singleton, unary, unit, unity\\
+% 2 & Two & binary, brace, couple, couplet, distich, deuce, double, doubleton, duad, duality, duet, duo, dyad, pair, snake eyes, span, twain, twosome, yoke\\
+% 3 & Three & deuce-ace, leash, set, tercet, ternary, ternion, terzetto, threesome, tierce, trey, triad, trine, trinity, trio, triplet, troika, hat-trick\\\bottomrule
+% \end{tabularx}
+% \end{table}
+
+% 绘制该表格的代码如下：
+
+% \begin{latex}
+% \begin{table}[htbp]
+% \caption{表格标题}
+% \label{标签名}
+% \begin{tabularx}{\textwidth}{l...X...l}
+% \toprule
+% 表头第1个格   & ... & 表头第X个格   & ... & 表头第n个格  \\
+% \midrule
+% 表中数据(1,1) & ... & 表中数据(1,X) & ... & 表中数据(1,n)\\
+% 表中数据(2,1) & ... & 表中数据(2,X) & ... & 表中数据(2,n)\\
+% .........................................................\\
+% 表中数据(m,1) & ... & 表中数据(m,X) & ... & 表中数据(m,n)\\
+% \bottomrule
+% \end{tabularx}
+% \end{table}
+% \end{latex}
+
+% \texttt{tabularx} 环境共有两个必选参数：第1个参数用来确定表格的总宽度，这里取
+% 为排版表格能达到的最大宽度——正文宽度 \verb|\textwidth|；第2个参数用来确定每列
+% 格式，其中标为 \verb|X| 的项表示该列的宽度可调，其宽度值由表格总宽度确定。标
+% 为 \verb|X| 的列一般选为单元格内容过长而无法置于一行的列，这样使得该列内容能
+% 够根据表格总宽度自动分行。若列格式中存在不止一个 \verb|X| 项，则这些标为
+% \verb|X| 的列的列宽相同，因此，一般不将内容较短的列设为 \verb|X| 。标为
+% \verb|X| 的列均为左对齐，因此其余列一般选为 \verb|l| （左对齐），这样可使得表格
+% 美观，但也可以选为 \verb|c| 或 \verb|r|。
+
+% \subsubsection{对物理量符号进行注释的情况}
+
+% 为使得对公式中物理量符号注释的转行与破折号“——”后第一个字对齐，此处最
+% 好采用表格环境。此表格无任何线条，左对齐，且在破折号处对齐，一共有“式中”二字
+% 、物理量符号和注释三列，表格的总宽度可选为文本宽度，因此应该采用
+% \texttt{tabularx} 环境。由该环境生成的对公式中物理量符号进行注释的公式如式
+% (\ref{eq:1})所示。
+
+% \begin{equation}
+% \label{eq:1}
+% \ddot{\symbf{\rho}}-\frac{\mu}{R_t^3}\left(3\symbf{R_t}\frac{\symbf{R_t\rho}}{R_t^2}-\symbf{\rho}\right)=\symbf{a}
+% \end{equation}
+% \begin{flushleft}
+% \renewcommand\arraystretch{1.25}
+% \begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
+% 式中& $\symbf{\rho}$ &追踪飞行器与目标飞行器之间的相对位置矢量；\\
+% &  $\ddot{\symbf{\rho}}$&追踪飞行器与目标飞行器之间的相对加速度；\\
+% &  $\symbf{a}$   &推力所产生的加速度；\\
+% &  $\symbf{R_t}$ & 目标飞行器在惯性坐标系中的位置矢量；\\
+% &  $\omega_{t}$ & 目标飞行器的轨道角速度；\\
+% &  $\symbf{g}$ & 重力加速度，$=\frac{\mu}{R_{t}^{3}}\left(
+% 3\symbf{R_{t}}\frac{\symbf{R_{t}\rho}}{R_{t}^{2}}-\symbf{\rho}\right)=\omega_{t}^{2}\frac{R_{t}}{p}\left(
+% 3\symbf{R_{t}}\frac{\symbf{R_{t}\rho}}{R_{t}^{2}}-\symbf{\rho}\right)$，这里~$p$~是目标飞行器的轨道半通径。
+% \end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
+% \end{flushleft}
+
+% 其中生成注释部分的代码及其说明如下：
+% \begin{latex}
+% \begin{tabularx}{\textwidth}{@{}l@{\quad}l@{——}X@{}}
+% 式中 & symbol-1 & symbol-1的注释内容；\\
+%      & symbol-2 & symbol-2的注释内容；\\
+%      .............................；\\
+%      & symbol-m & symbol-m的注释内容。
+% \end{tabularx}
+% \end{latex}
+
+% \texttt{tabularx} 环境的第1个参数为正文宽度，第2个参数里面各个符号的意义为：
+% \begin{itemize}
+% \item 第1个@{}表示在“式中”二字左侧不插入任何文本，“式中”二字能够在正文中左对
+% 齐，若无此项，则“式中”二字左侧会留出一定的空白；
+% \item \verb|@{\quad}| 表示在“式中”和物理量符号间插入一个空铅宽度的空白；
+% \item \verb|@{——}| 实现插入破折号的功能；
+% \item 第2个 \verb|@{}| 表示在注释内容靠近正文右边界的地方能够实现右对齐。
+% \end{itemize}
+
+% \subsection{小页中的脚注}
+
+% 关于小页中的脚注，请看下面的例子：
+ 
+% \begin{minipage}[t]{\linewidth-\parindent}
+% 柳宗元，字子厚（773-819），河东（今永济县）人\footnote{山西永济水饺。}，是唐
+% 代杰出的文学家，哲学家，同时也是一位政治改革家。与韩愈共同倡导唐代古文运动，
+% 并称韩柳\footnote{唐宋八大家之首二位。}。
+% \end{minipage}
+
+% \section{数学公式示例}
+% \label{sec:equation}
+
+% \LaTeX{} 的数学公式有两种形式：行间（inline）模式和独立（display）模式。前者是
+% 指在正文中插入数学内容；后者独立排列，可以有或者没有编号。行间公式和无编号独立
+% 公式都有多种输入方法，一般行间公式用 \verb|$|\ldots \verb|$|，无编号独立公式用
+% \verb|\[|\ldots \verb|\]|。有编号独立公式则需要用 \texttt{equation} 环境。
+
+% 注意一下公式显示模式的不同，这个公式为行间模式：
+% $\lim_{n \to \infty} \sum_{k=1}^n \frac{1}{k^2} = \frac{\pi^2}{6}$；下面的公式
+% 是独立模式：
+% \[\lim_{n \to \infty} \sum_{k=1}^n \frac{1}{k^2} = \frac{\pi^2}{6}\]
+
+% \subsection{多行公式}
+
+% \textbf{amsmath} 宏包提供了额外的行间独立（display）公式的结构，主要用于一个
+% 公式太长一行放不下，或几个公式需要写成一组的情况，该宏包主要提供以下几个环境
+% ：
+% \begin{center}
+% \begin{tabular}[c]{cccc}
+% equation & align & gather & split \\
+% flalign & multline & alignat &  \\
+% \end{tabular}
+% \end{center}
+
+% 除了 \texttt{split} 外，其余环境均提供带*的版本，不生成公式编号。
+
+% \subsubsection{长公式}
+
+% 对于多行不需要对齐的长公式，我们可以用 \texttt{multline} 环境。
+% \begin{multline}
+% \framebox[.65\columnwidth]{A}\\
+% \framebox[.5\columnwidth]{B}\\
+% \shoveright{\framebox[.5\columnwidth]{C}}\\
+% \framebox[.65\columnwidth]{D}
+% \end{multline}
+
+% 其代码如下：
+% \begin{latex}
+% \begin{multline}
+% \framebox[.65\columnwidth]{A}\\
+% \framebox[.5\columnwidth]{B}\\
+% \shoveright{\framebox[.tt\columnwidth]{C}}\\
+% \framebox[.65\columnwidth]{D}
+% \end{multline}
+% \end{latex}
+
+% \texttt{multline} 环境用于单行放不下的长公式，其第一行及最后一行分别居左、居右
+% 对齐，两端均缩进距离 \verb|\multlinegap|；其它行则默认居中排布，但可以用个命令
+% \verb|\shoveleft|、\verb|\shoveright| 分别使居左或居右排布。
+
+% 需要对齐的长公式可以用 \texttt{split} 环境，它本身不能单独使用，因此也称作次环境
+% ，必须包含在 \texttt{equation} 或其它数学环境内。\texttt{split} 环境用 \verb|\\| 
+% 和 \verb|&| 来分行和设置对齐位置。
+% \begin{equation}
+% \begin{split}
+% H_c&=\frac{1}{2n} \sum^n_{l=0}(-1)^{l}(n-{l})^{p-2}
+% \sum_{l _1+\dots+ l _p=l}\prod^p_{i=1} \binom{n_i}{l _i}\\
+% &\quad\cdot[(n-l)-(n_i-l_i)]^{n_i-l_i}\cdot
+% \Bigl[(n-l)^2-\sum^p_{j=1}(n_i-l_i)^2\Bigr].
+% \end{split}
+% \label{eqn:barwq}
+% \end{equation}
+
+% \subsubsection{公式组}
+
+% 不需要对齐的公式组用 \texttt{gather} 环境，该环境中的公式均居中排布，各公式间用
+% \verb|\\| 分开；需要对齐的用 \texttt{align}，在该环境中使用 \verb|\text| 命令可
+% 以生成对单独公式的注释。
+% \begin{gather}
+%   first equation\\
+%   \begin{split}
+%     second & equation\\
+%            & on twolines
+%   \end{split}
+% \end{gather}
+
+% \begin{align}
+%  x & = y_1-y_2+y_3-y_5+y_8-\dots && \text{by \eqref{eqn:barwq}}\\
+%    & = y'\circ y^*               && \text{by \eqref{eqn:barwq}}\\
+%    & = y(0) y'                   && \text{by Axiom 1.}
+% \end{align}
+
+% 就像单独的行间公式一样，使用 \texttt{gather}、\texttt{align} 和
+% \texttt{alignat} 环境生成的公式组中的每个公式也都是占据整个文本的宽度，因此
+% 这样的公式组两侧不能再添加其它内容，比如大括号等。不过相应地用
+% \texttt{gathered}、\texttt{aligned} 和 \texttt{alignedat} 环境则生成仅占据
+% 实际公式宽度的公式组。
+% \begin{equation*}
+% \left. \begin{aligned}
+%   \symbf{B'}&=-\symbfit{\partial}\times \symbf{E},\\
+%   \symbf{E'}&=\symbfit{\partial}\times \symbf{B} - 4\pi j,
+% \end{aligned}
+% \right\}
+% \qquad \text{Maxwell's equations}
+% \end{equation*}
+
+% 有多种条件的公式组用 \texttt{cases} 次环境。
+% \[ P_{r-j}=\begin{cases}
+%   0& \text{if $r-j$ is odd},\\
+%   r!\,(-1)^{(r-j)/2}& \text{if $r-j$ is even}.
+% \end{cases} \]
+
+% 这里仅简单介绍了 \textbf{amsmath} 的功能，更详尽的说明可参见该宏包的文档。
+
+% \subsection{定理和证明}
+
+% \zzuthesis{} 定义了常用的数学环境：
+% \begin{center}
+% \begin{tabular}{*{7}{l}}\hline
+%   theorem & definition & lemma & corollary &\\
+%   定理 & 定义 & 引理 & 推论 &\\\hline
+% \end{tabular}
+% \end{center}
+
+% 以上环境的定义采用 \textbf{amsthm} 宏包提供的 \verb|\newtheorem| 命令，其语法
+% 如下：
+
+% \begin{latex}
+% \newtheorem{环境名}[编号延续]{显示名}[编号层次]
+% \end{latex}
+
+% 下面是应用示例：
+% \begin{definition}
+% Java是一种跨平台的编程语言。
+% \end{definition}
+
+% \begin{theorem}
+% 咖啡因会使人的大脑兴奋。
+% \end{theorem}
+
+% \begin{lemma}
+% 茶和咖啡都会使人兴奋。
+% \end{lemma}
+
+% \begin{corollary}
+% 晚上喝咖啡会导致失眠。
+% \end{corollary}
+
+% \texttt{proof} 环境可以用来输入证明，它会在结尾输入一个 QED 符号
+% \footnote{拉丁语~quod erat demonstrandum~的缩写。}。
+
+% \begin{proof}[命题“物质无限可分”的证明]
+% 一尺之棰，日取其半，万世不竭。
+% \end{proof}

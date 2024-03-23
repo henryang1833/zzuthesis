@@ -71,6 +71,12 @@ d类攻击将攻击者所处子网内的地址作为源地址，因为入口过�
 
 \section{数据包标记法}
 图~\ref{fig:simple_topology}~是一个IP回溯问题的简单网络拓扑图。
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width = 0.8\textwidth]{simple_topology.png}
+  \caption{针对路由回溯问题的简单拓扑图}
+  \label{fig:simple_topology}
+\end{figure}
 整个结构可以看作是一棵以$V$为根节点的树，$V$代表一个遭受攻击的\textbf{受害者}，它可能为服务器、防火墙或者入侵检测系统。
 每个$A_i$是树中的叶子节点，它代表潜在的\textbf{攻击源}，它可能为例如攻击者主机也可能为普通的用户。
 每个$R_i$则代表从这些$A_i$到$V$的中间路由器。
@@ -79,12 +85,7 @@ d类攻击将攻击者所处子网内的地址作为源地址，因为入口过�
 例如，假设$A_1$是一个攻击节点，它正在向$V$发送攻击数据包，这些攻击数据包走过的路径是唯一的，由$R_7$、$R_4$、$R_2$、$R_1$依次组成，则这条从$A_1$到$V$的唯一的路径就是一条攻击路径。
 一个\textbf{IP回溯问题}就是通过一些方法和策略确定攻击路径，揭示攻击主机的真实身份和具体位置。
 
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width = 0.8\textwidth]{simple_topology.png}
-    \caption{针对路由回溯问题的简单拓扑图}
-    \label{fig:simple_topology}
-  \end{figure}
+
 
 当回溯成功后便可以从攻击源的下游最近邻路由器过滤掉这些数据包以保护受害者服务器免受攻击。
 在这个问题中，似乎只要从攻击数据包中提取出源IP就可以确定攻击路径，然而解决这个问题通常是很复杂的。
@@ -340,7 +341,7 @@ ResNet的核心思想是引入了“残差学习”的概念，以解决深度�
 如图~\ref{fig:traintesterror}~所示，在传统的深度神经网络中，随着层数的增加，网络变得越来越难以训练，这主要是因为梯度在反向传播时会逐渐消失或爆炸，导致网络权重难以更新。
 
 
-\begin{figure}[htbp]
+\begin{figure}[h]
   \centering
   \includegraphics[width = 0.8\textwidth]{traintesterror.png}
   \caption{20层和56层的“普通”网络在CIFAR-10数据集上训练结果，左图是训练误差，右图是测试误差\cite{he2016deep}。}
