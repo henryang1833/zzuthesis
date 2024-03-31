@@ -454,13 +454,6 @@ UNSW-NB15数据集\cite{moustafa2015comprehensive}由澳大利亚新南威尔士
 	Recall = \frac{TP}{TP + FN}
 \end{equation}
 
-% (4) F1 分数\par
-% F1 分数是精确度和召回率的调和平均，用于衡量模型的精确度和召回率的平衡程度。
-% \begin{equation}
-%   \label{eq:val_score4}
-%   F1 = 2 \times \frac{Precision \times Recall}{Precision + Recall} = \frac{2TP}{2TP + FP + FN}
-% \end{equation}
-
 (4)宏平均 F1 分数\par
 宏平均 F1 分数是一种性能评估指标，用于衡量模型在所有类别上的平均表现。
 它通过简单地计算所有类别 F1 分数的算术平均值得出，每个类别被赋予相同的权重，不论其样本量大小。
@@ -499,20 +492,6 @@ UNSW-NB15数据集\cite{moustafa2015comprehensive}由澳大利亚新南威尔士
 	\end{tabularx}\vspace{.5ex}%TODO : 注释内容自动转页接排
 \end{flushleft}
 
-% (6) 混淆矩阵\par
-% 混淆矩阵是一种特定的表格布局，用于可视化模型性能，显示实际类别与模型预测类别之间的关系。
-% \begin{equation}
-%   \label{eq:val_score6}
-%   Confusion Matrix = \begin{bmatrix} TP & FP \\ FN & TN \end{bmatrix}
-% \end{equation}
-
-% (7) ROC-AUC 分数\par
-% ROC-AUC 分数是接收者操作特征（ROC）曲线下面积的度量，用于评估分类器的预测能力。
-% \begin{equation}
-%   \label{eq:val_score7}
-%   AUC = \int_{0}^{1} TPR(FPR) \, d(FPR)
-% \end{equation}
-
 上式\ref{eq:val_score1}、\ref{eq:val_score2}、\ref{eq:val_score3}%、\ref{eq:val_score4}、\ref{eq:val_score5}\ref{eq:val_score6}、\ref{eq:val_score7}%
 中,
 $TP$(True Positives)表示正确地将正类预测为正类;
@@ -521,8 +500,9 @@ $FP$(False Positives)表示错误地将负类预测为正类；
 $FN$(False Negatives)表示错误地将正类预测为负类。
 
 4)~特征编码效果实验评估\par
-在本次实验中，我们通过比较特征编码前后各种机器学习和深度学习模型的准确率(图~\ref{fig:comapre_accuracy_encoding}~以及表~\ref{tab:model_performance}\footnote{由于表格长度有限，朴素贝叶斯的表现我们没有放到表格中，朴素贝叶斯特征编码前后各性能指标变化：Acc 97.72\% \rightarrow 97.27\% ,f1\_mac 0.3376 \rightarrow 0.2166, f1\_wei 0.9726 \rightarrow 0.9729。}
-~，其中DT、LR、KNN、 NB、 Ada、ResN、BiG、RB-NMF、RB-MF分别代表决策树、逻辑回归、K近邻、朴素贝叶斯、Ada增强、残差神经网络、双向门控循环单元、未经过多模态特征融合的残差神经网络与门控循环单元混合模型以及经过多模态特征融合的残差神经网络与门控循环单元混合模型)，得出了一些发现。
+% todo
+% \footnote{由于表格长度有限，朴素贝叶斯的表现我们没有放到表格中，朴素贝叶斯特征编码前后各性能指标变化：Acc 97.72\% \rightarrow 97.27\% ,f1\_mac 0.3376 \rightarrow 0.2166, f1\_wei 0.9726 \rightarrow 0.9729。}
+在本次实验中，我们通过比较特征编码前后各种机器学习和深度学习模型的准确率(图~\ref{fig:comapre_accuracy_encoding}~以及表~\ref{tab:model_performance}~，其中DT、LR、KNN、 NB、 Ada、ResN、BiG、RB-NMF、RB-MF分别代表决策树、逻辑回归、K近邻、朴素贝叶斯、Ada增强、残差神经网络、双向门控循环单元、未经过多模态特征融合的残差神经网络与门控循环单元混合模型以及经过多模态特征融合的残差神经网络与门控循环单元混合模型)，得出了一些发现。
 \begin{figure}[htbp]
 	\centering
 	\includegraphics[width = \textwidth]{acc.png}
@@ -531,6 +511,7 @@ $FN$(False Negatives)表示错误地将正类预测为负类。
 \end{figure}
 \begin{table}[htbp]
 	\centering
+	\setlength{\tabcolsep}{3pt}
 	\caption{特征编码前后模型表现}
 	\label{tab:model_performance}
 	\begin{tabular}{ccccccccc}
@@ -1174,13 +1155,13 @@ NSL-KDD数据集中包含的攻击流量可分为拒绝服务攻击（DoS）、�
 在增量学习的每个批次中，我们都进行100轮的训练，以确保模型能够充分学习当前批次的数据。\par
 2)~实验结果与分析\par
 为验证本文方案进行增量学习后的效果，我们选取了一系列模型，包括DT（决策树）、LR（逻辑回归）、KNN（K近邻）、NB（朴素贝叶斯）、Ada（AdaBoost增强）、ResN（残差神经网络）、BiG（双向门控循环单元）、RNBG-NMF（未经多模态特征融合的残差神经网络与双向门控循环单元）、RNBG-MF（经过多模态特征融合的残差神经网络与双向门控循环单元）、RNBG-MF with iCaRL（基于iCaRL的RNBG-MF模型），以及RNBG-MF with iCaRL and GA（结合了遗传算法记忆集抽样优化的RNBG-MF with iCaRL模型），并对这些模型进行了增量学习实验。
-当所有新任务训练集的内容学习完成后，我们将新任务测试集与旧任务测试集进行合并，用以评估各模型在混合数据集上的性能。\par
+当所有新任务训练集的内容学习完成后，我们将新任务测试集与旧任务测试集进行合并形成混合测试集，用以评估各模型在混合数据集上的性能。\par
 
 图~\ref{fig:acc_icarl}展示了各个模型在新任务测试集上的准确率表现。
 \begin{figure}[h]
 	\centering
 	\includegraphics[width=0.8\textwidth]{icarl_accuracy.png}
-	\caption{增量学习后模型在新旧任务测试集上准确率对比柱状图}
+	\caption{增量学习后各模型在混合测试集上准确率对比柱状图}
 	\label{fig:acc_icarl}
 \end{figure}
 从图中可以明显看出，引入iCaRL策略后，模型的准确率得到了显著提升。
