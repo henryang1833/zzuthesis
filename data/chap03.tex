@@ -91,6 +91,11 @@ ResNet的强大之处在于其深度结构和残差连接，使其能够捕捉�
 		     & $v$ & 各模态的输入；                                                          \\
 		     & $w$ & 权重，下标表示不同的模态，通过映射$f$将所有子模态语义转换到共享子空间。 \\
 	\end{tabularx}\vspace{.5ex}
+		式中 & $z$ & 共享语义子空间的输出结果；                                              \\
+		     & $N$ & 类别总数；                                                              \\
+		     & $v$ & 各模态的输入；                                                          \\
+		     & $w$ & 权重，下标表示不同的模态，通过映射$f$将所有子模态语义转换到共享子空间。 \\
+	\end{tabularx}\vspace{.5ex}
 \end{flushleft}
 
 
@@ -104,6 +109,9 @@ ResNet的强大之处在于其深度结构和残差连接，使其能够捕捉�
 	\renewcommand\arraystretch{1.25}
 	\begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
 		式中 & $z$       & 融合张量后的结果输出； \\
+		     & $v$       & 不同的模态；           \\
+		     & $\otimes$ & 外积算子。             \\
+	\end{tabularx}\vspace{.5ex}
 		     & $v$       & 不同的模态；           \\
 		     & $\otimes$ & 外积算子。             \\
 	\end{tabularx}\vspace{.5ex}
@@ -167,12 +175,20 @@ identity\_block则在不需要改变输入特征图维度时使用，主要用�
 						3 \times 3, 64 \\
 						1 \times 1, 256
 					\end{array}\right] \times 2$ , stride 2}                  \\
+						1 \times 1, 64 \\
+						3 \times 3, 64 \\
+						1 \times 1, 256
+					\end{array}\right] \times 2$ , stride 2}                  \\
 		                          &                                          &                          \\
 		                          &                                          &                          \\
 		                          &                                          &                          \\
 		\hline
 		\multirow{4}{*}{conv3\_x} & \multirow{4}{*}{\centering $8 \times 8$} &
 		\multirow{4}{*}{$\left[\begin{array}{c}
+						1 \times 1, 64 \\
+						3 \times 3, 64 \\
+						1 \times 1, 256
+					\end{array}\right] \times 2$, stride 1}                   \\
 						1 \times 1, 64 \\
 						3 \times 3, 64 \\
 						1 \times 1, 256
@@ -223,6 +239,7 @@ identity\_block则在不需要改变输入特征图维度时使用，主要用�
 		\textbf{总参数} & \textbf{可训练参数数量} & \textbf{非可训练参数数量} \\
 		\midrule
 		1,417,510       & 1,412,518               & 4,992                     \\
+		1,417,510       & 1,412,518               & 4,992                     \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -271,15 +288,27 @@ One-Hot 编码是一种特殊且广泛使用的特征编码方法，它易于理
 		\multicolumn{2}{l}{\textbf{输出}: 经过One-hot编码的数据集 $D'$}           \\
 		1  & 初始化一个空的数据集 $D'$                                            \\
 		2  & \textbf{for} 每一列 $col$ \textbf{in} $D$:                           \\
+		\multicolumn{2}{l}{\textbf{输入}: 数据集 $D$，其中包含数值型和分类型列}   \\
+		\multicolumn{2}{l}{\textbf{输出}: 经过One-hot编码的数据集 $D'$}           \\
+		1  & 初始化一个空的数据集 $D'$                                            \\
+		2  & \textbf{for} 每一列 $col$ \textbf{in} $D$:                           \\
 		3  & \quad \textbf{if} $col$ 是分类型:                                    \\
+		4  & \quad\quad $unique\_values$ = 获取 $col$ 的所有唯一值                \\
 		4  & \quad\quad $unique\_values$ = 获取 $col$ 的所有唯一值                \\
 		5  & \quad\quad \textbf{for} 每一个值 $val$ \textbf{in} $unique\_values$: \\
 		6  & \quad\quad\quad 创建一个新列 $new\_col$，名称为 ``$col\_val$''       \\
 		7  & \quad\quad\quad \textbf{for} 每一行 $row$ \textbf{in} $D$:           \\
 		8  & \quad\quad\quad\quad \textbf{if} $row[col] == val$:                  \\
+		6  & \quad\quad\quad 创建一个新列 $new\_col$，名称为 ``$col\_val$''       \\
+		7  & \quad\quad\quad \textbf{for} 每一行 $row$ \textbf{in} $D$:           \\
+		8  & \quad\quad\quad\quad \textbf{if} $row[col] == val$:                  \\
 		9  & \quad\quad\quad\quad\quad 在 $D'[new\_col]$ 中填充 1                 \\
 		10 & \quad\quad\quad\quad \textbf{else}:                                  \\
+		10 & \quad\quad\quad\quad \textbf{else}:                                  \\
 		11 & \quad\quad\quad\quad\quad 在 $D'[new\_col]$ 中填充 0                 \\
+		12 & \quad \textbf{else}:                                                 \\
+		13 & \quad\quad 将 $col$ 直接复制到 $D'$ 中                               \\
+		14 & \textbf{return} $D'$                                                 \\
 		12 & \quad \textbf{else}:                                                 \\
 		13 & \quad\quad 将 $col$ 直接复制到 $D'$ 中                               \\
 		14 & \textbf{return} $D'$                                                 \\
@@ -312,9 +341,14 @@ SMOTE(Synthetic Minority Over-sampling Technique)是一种过采样策略，通�
 	\begin{tabularx}{1.0\textwidth}{cl}
 		\toprule
 		\multicolumn{2}{l}{\textbf{SMOTE算法}}                                              \\
+		\multicolumn{2}{l}{\textbf{SMOTE算法}}                                              \\
 		\midrule
 		\multicolumn{2}{l}{\textbf{输入}: 少数类样本集 $S$，采样倍率 $N$，最近邻数 $k$}     \\
+		\multicolumn{2}{l}{\textbf{输入}: 少数类样本集 $S$，采样倍率 $N$，最近邻数 $k$}     \\
 		\multicolumn{2}{l}{\textbf{输出}: 合成样本集 $S'$}                                  \\
+		1  & 如果 $N$ 不是整数，则将 $N$ 向下取整，同时调整最终的样本数量                   \\
+		2  & 初始化空的合成样本集 $S'$                                                      \\
+		3  & \textbf{for} 每一个样本 $s$ \textbf{in} $S$:                                   \\
 		1  & 如果 $N$ 不是整数，则将 $N$ 向下取整，同时调整最终的样本数量                   \\
 		2  & 初始化空的合成样本集 $S'$                                                      \\
 		3  & \textbf{for} 每一个样本 $s$ \textbf{in} $S$:                                   \\
@@ -323,7 +357,14 @@ SMOTE(Synthetic Minority Over-sampling Technique)是一种过采样策略，通�
 		6  & \quad\quad 随机选择一个最近邻 $nn$                                             \\
 		7  & \quad\quad \textbf{for} 每个特征 $f$:                                          \\
 		8  & \quad\quad\quad 计算 $s$ 和 $nn$ 在特征 $f$ 上的差值 $\Delta f$                \\
+		5  & \quad \textbf{for} $i$ \textbf{from} 1 \textbf{to} $N$:                        \\
+		6  & \quad\quad 随机选择一个最近邻 $nn$                                             \\
+		7  & \quad\quad \textbf{for} 每个特征 $f$:                                          \\
+		8  & \quad\quad\quad 计算 $s$ 和 $nn$ 在特征 $f$ 上的差值 $\Delta f$                \\
 		9  & \quad\quad\quad 生成新值 $new\_f = s[f] + \Delta f \times \text{随机数}(0, 1)$ \\
+		10 & \quad\quad 创建新样本 $new\_s[i]$，其特征值为所有生成的 $new\_f$               \\
+		11 & \quad\quad 将 $new\_s[i]$ 添加到合成样本集 $S'$                                \\
+		12 & \textbf{return} $S'$                                                           \\
 		10 & \quad\quad 创建新样本 $new\_s[i]$，其特征值为所有生成的 $new\_f$               \\
 		11 & \quad\quad 将 $new\_s[i]$ 添加到合成样本集 $S'$                                \\
 		12 & \textbf{return} $S'$                                                           \\
@@ -342,25 +383,36 @@ UNSW-NB15数据集\cite{moustafa2015comprehensive}由澳大利亚新南威尔士
 	\begin{tabularx}{\textwidth}{@{}cccX@{}}
 		\toprule
 		\multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{占比（\%）}} & \multicolumn{1}{c}{\textbf{描述}}                                                                \\
+		\multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{占比（\%）}} & \multicolumn{1}{c}{\textbf{描述}}                                                                \\
 		\midrule
+		Normal                            & 2218761                           & 87.35\%                                 & 正常数据                                                                                         \\
 		Normal                            & 2218761                           & 87.35\%                                 & 正常数据                                                                                         \\
 
 		Fuzzers                           & 24246                             & 0.95\%                                  & 通过向程序或网络输入随机数据尝试使其悬挂或暂停的攻击                                             \\
+		Fuzzers                           & 24246                             & 0.95\%                                  & 通过向程序或网络输入随机数据尝试使其悬挂或暂停的攻击                                             \\
 
+		Analysis                          & 2677                              & 0.11\%                                  & 包含不同的端口扫描、垃圾邮件和html文件渗透攻击                                                   \\
 		Analysis                          & 2677                              & 0.11\%                                  & 包含不同的端口扫描、垃圾邮件和html文件渗透攻击                                                   \\
 
 		Backdoors                         & 2329                              & 0.09\%                                  & 一种秘密绕过系统安全机制以访问计算机或其数据的技术                                               \\
+		Backdoors                         & 2329                              & 0.09\%                                  & 一种秘密绕过系统安全机制以访问计算机或其数据的技术                                               \\
 
+		DoS                               & 16353                             & 0.64\%                                  & 恶意尝试使服务器或网络资源对用户不可用，通常通过暂时中断或悬挂连接到互联网的主机的服务来实现     \\
 		DoS                               & 16353                             & 0.64\%                                  & 恶意尝试使服务器或网络资源对用户不可用，通常通过暂时中断或悬挂连接到互联网的主机的服务来实现     \\
 
 		Exploits                          & 44525                             & 1.75\%                                  & 攻击者了解操作系统或软件内的安全问题，并利用这一点通过利用漏洞进行攻击                           \\
+		Exploits                          & 44525                             & 1.75\%                                  & 攻击者了解操作系统或软件内的安全问题，并利用这一点通过利用漏洞进行攻击                           \\
 
+		Generic                           & 215481                            & 8.48\%                                  & 一种针对所有给定块大小和密钥大小的分组密码的技术，不考虑分组密码的结构                           \\
 		Generic                           & 215481                            & 8.48\%                                  & 一种针对所有给定块大小和密钥大小的分组密码的技术，不考虑分组密码的结构                           \\
 
 		Recon                             & 13987                             & 0.55\%                                  & 包含所有可以模拟收集信息攻击的攻击                                                               \\
+		Recon                             & 13987                             & 0.55\%                                  & 包含所有可以模拟收集信息攻击的攻击                                                               \\
 
 		Shellcode                         & 1511                              & 0.06\%                                  & 利用软件漏洞进行攻击的载荷中的一小段代码                                                         \\
+		Shellcode                         & 1511                              & 0.06\%                                  & 利用软件漏洞进行攻击的载荷中的一小段代码                                                         \\
 
+		Worms                             & 174                               & 0.01\%                                  & 攻击者复制自身以便传播到其他计算机，通常使用计算机网络传播，依赖于目标计算机上的安全漏洞进行传播 \\
 		Worms                             & 174                               & 0.01\%                                  & 攻击者复制自身以便传播到其他计算机，通常使用计算机网络传播，依赖于目标计算机上的安全漏洞进行传播 \\
 		\bottomrule
 	\end{tabularx}
@@ -379,7 +431,20 @@ UNSW-NB15数据集\cite{moustafa2015comprehensive}由澳大利亚新南威尔士
 	\begin{tabularx}{\textwidth}{@{}ccX@{}}
 		\toprule
 		\multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{子类}}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   \\
+		\multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{子类}}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   \\
 		\midrule
+		Fuzzers                           & 10                                & FTP, HTTP, RIP, SMB, Syslog, PPTP, TFTP, DCERPC, OSPF, BGP                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          \\
+		Probe                             & 13                                & Telnet, SNMP, SunRPC Portmapper (TCP) UDP Service, SunRPC Portmapper (TCP) TCP Service, SunRPC Portmapper (UDP) UDP Service, NetBIOS, DNS, HTTP,
+		SunRPC Portmapper (UDP), ICMP, SCTP, MSSQL, SMTP                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            \\
+		Shellcode                         & 15                                & FreeBSD, HP-UX, NetBSD, AIX, SCO Unix, Linux, Decoders, IRIX, OpenBSD, Mac OS X, BSD, Windows, BSDi, Multiple OS, Solaris                                                                                                                                                                                                                                                                                                                                                                                                                                           \\
+		Analysis                          & 3                                 & HTML, Port Scanner, Spam                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            \\
+		Backdoors                         & 1                                 & Backdoors                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           \\
+		DoS                               & 36                                & Ethernet, SunRPC, LDAP, Browser, DCERPC, Telnet, NetBIOS/SMB, DNS, TCP, Common Unix Print System (CUPS), Miscellaneous, ISAKMP, Hypervisor,
+		Cisco Skinny, IIS Web Server, IGMP, ICMP, XINETD, SIP, RTSP, Windows Explorer, IRC, NTP, CUPS, Asterisk, HTTP, Microsoft Office, SSL, IMAP, SMTP, Oracle, RDP, VNC, FTP, TFTP, SNMP                                                                                                                                                                                                                                                                                                                                                                                                                                                         \\
+		Exploits                          & 54                                & Clientside Microsoft Paint, Dameware, Clientside Microsoft Media Player, SSH, SCCP, Unix r Service, SunRPC, LDAP, Web Application, Browser, DCERPC, Interbase, Telnet, DNS, TCP, Webserver, SCADA, SMB, Miscellaneous, Cisco IOS, All, LPD, RADIUS, RDesktop, Unix 'r' Service, IGMP, POP3, ICMP, Clientside Microsoft, Microsoft IIS, Backup Appliance, IDS, Apache, NNTP, RTSP, Evasions, SIP, WINS, Office Document, PHP, Clientside Microsoft Office, Miscellaneous Batch, Browser FTP, MSSQL, SOCKS, PPTP, Clientside, SSL, IMAP, SMTP, Oracle, VNC, FTP, TFTP \\
+		Generic                           & 7                                 & All,SIP,HTTP,SMTP,IXIA,TFTP,Superflow                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               \\
+		Recon                             & 14                                & DNS, HTTP, ICMP, MSSQL, NetBIOS, SCTP, SMTP, SNMP, SunRPC, SunRPC Portmapper (TCP) TCP Service, SunRPC Portmapper (TCP) UDP Service, SunRPC Portmapper (UDP) TCP Service, SunRPC Portmapper (UDP) UDP Service, Telnet                                                                                                                                                                                                                                                                                                                                               \\
+		Worms                             & 1                                 & Worms                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               \\
 		Fuzzers                           & 10                                & FTP, HTTP, RIP, SMB, Syslog, PPTP, TFTP, DCERPC, OSPF, BGP                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          \\
 		Probe                             & 13                                & Telnet, SNMP, SunRPC Portmapper (TCP) UDP Service, SunRPC Portmapper (TCP) TCP Service, SunRPC Portmapper (UDP) UDP Service, NetBIOS, DNS, HTTP,
 		SunRPC Portmapper (UDP), ICMP, SCTP, MSSQL, SMTP                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            \\
@@ -410,7 +475,14 @@ UNSW-NB15数据集\cite{moustafa2015comprehensive}由澳大利亚新南威尔士
 	\begin{tabular}{ccc}
 		\toprule
 		\textbf{环境类别}         & \textbf{设备项目} & \textbf{项目参数}                  \\
+		\textbf{环境类别}         & \textbf{设备项目} & \textbf{项目参数}                  \\
 		\midrule
+		\multirow{6}{*}{硬件环境} & CPU型号           & Intel(R) Core(TM) i7-11800H        \\
+		                          & CPU规格           & 8核16线程@2.30GHz                  \\
+		                          & GPU型号           & NVIDIA GeForce RTX 3060 Laptop GPU \\
+		                          & 内存大小          & 16.0 GB                            \\
+		                          & 硬盘类型          & SSD                                \\
+		                          & 硬盘大小          & 1TB                                \\
 		\multirow{6}{*}{硬件环境} & CPU型号           & Intel(R) Core(TM) i7-11800H        \\
 		                          & CPU规格           & 8核16线程@2.30GHz                  \\
 		                          & GPU型号           & NVIDIA GeForce RTX 3060 Laptop GPU \\
@@ -419,6 +491,8 @@ UNSW-NB15数据集\cite{moustafa2015comprehensive}由澳大利亚新南威尔士
 		                          & 硬盘大小          & 1TB                                \\
 		\hline
 		\multirow{3}{*}{软件环境} & 操作系统          & Windows 11                         \\
+		                          & 开发语言          & Python 3.11.7                      \\
+		                          & 编辑器            & Visual Studio Code                 \\
 		                          & 开发语言          & Python 3.11.7                      \\
 		                          & 编辑器            & Visual Studio Code                 \\
 		\bottomrule
@@ -463,6 +537,10 @@ UNSW-NB15数据集\cite{moustafa2015comprehensive}由澳大利亚新南威尔士
 		     & $N$          & 类别总数；                    \\
 		     & $F1_i$       & 表示第 $i$ 个类别的 F1 分数。 \\
 	\end{tabularx}\vspace{.5ex}
+		式中 & $F1_{macro}$ & 表示宏平均 F1 分数；          \\
+		     & $N$          & 类别总数；                    \\
+		     & $F1_i$       & 表示第 $i$ 个类别的 F1 分数。 \\
+	\end{tabularx}\vspace{.5ex}
 \end{flushleft}
 宏平均 F1 分数特别适用于样本分布不均匀的数据集，因为它给每个类别分配了同等的重要性。
 这样做确保了即使某些类别的样本数量很少，它们在计算平均分数时也会有相等的影响。\par
@@ -477,6 +555,11 @@ UNSW-NB15数据集\cite{moustafa2015comprehensive}由澳大利亚新南威尔士
 \begin{flushleft}
 	\renewcommand\arraystretch{1.25}
 	\begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
+		式中 & $F1_{weighted}$ & 加权平均F1分数；                                                  \\
+		     & $N$             & 类别总数；                                                        \\
+		     & $F1_i$          & 第$i$个类别的F1分数                                               \\
+		     & $w_i$           & 第$i$个类别的权重，通常由该类别的样本数量占总样本数量的比例确定。 \\
+	\end{tabularx}\vspace{.5ex}
 		式中 & $F1_{weighted}$ & 加权平均F1分数；                                                  \\
 		     & $N$             & 类别总数；                                                        \\
 		     & $F1_i$          & 第$i$个类别的F1分数                                               \\
@@ -502,17 +585,28 @@ $FN$(False Negatives)表示错误地将正类预测为负类。
 \begin{table}[htbp]
 	\centering
 	\setlength{\tabcolsep}{1pt}
+	\setlength{\tabcolsep}{1pt}
 	\caption{特征编码前后模型表现}
 	\label{tab:model_performance}
 	\begin{tabular}{cccccccccc}
+	\begin{tabular}{cccccccccc}
 		\toprule
+		        & DT               & LR              & KNN             & NB             & Ada               & ResN            & BiG           & RB-NMF          & RB-MF           \\
 		        & DT               & LR              & KNN             & NB             & Ada               & ResN            & BiG           & RB-NMF          & RB-MF           \\
 		\midrule
 		\multicolumn{9}{c}{\textbf{特征编码前}}                                                                                                                                   \\
 		Acc     & 99.19\%          & 98.66\%         & 98.68\%         & 97.72\%        & 97.22\%           & 98.92\%         & 98.85\%       & 98.89\%         & 99.45\%         \\
 		f1\_mac & 0.5422           & 0.3730          & 0.4042          & 0.3376         & 0.3609            & 0.4110          & 0.493         & 0.518           & 0.529           \\
 		f1\_wei & 0.9925           & 0.9874          & 0.9872          & 0.9726         & 0.9704            & 0.9892          & 0.9885        & 0.9891          & 0.9945          \\
+		\multicolumn{9}{c}{\textbf{特征编码前}}                                                                                                                                   \\
+		Acc     & 99.19\%          & 98.66\%         & 98.68\%         & 97.72\%        & 97.22\%           & 98.92\%         & 98.85\%       & 98.89\%         & 99.45\%         \\
+		f1\_mac & 0.5422           & 0.3730          & 0.4042          & 0.3376         & 0.3609            & 0.4110          & 0.493         & 0.518           & 0.529           \\
+		f1\_wei & 0.9925           & 0.9874          & 0.9872          & 0.9726         & 0.9704            & 0.9892          & 0.9885        & 0.9891          & 0.9945          \\
 		\midrule
+		\multicolumn{9}{c}{\textbf{特征编码后}}                                                                                                                                   \\
+		Acc     & 99.19\%          & 98.72\%\uparrow & 98.70\%\uparrow & 97.27\%        & 97.14\%\downarrow & 98.94\%\uparrow & 98.85\%       & 98.91\%\uparrow & 99.46\%\uparrow \\
+		f1\_mac & 0.5378\downarrow & 0.3871\uparrow  & 0.4090\uparrow  & 0.2166         & 0.3197\downarrow  & 0.4166\uparrow  & 0.495\uparrow & 0.52\uparrow    & 0.53\uparrow    \\
+		f1\_wei & 0.9925           & 0.9879\uparrow  & 0.9873\uparrow  & 0.9729\uparrow & 0.9723\uparrow    & 0.9898\uparrow  & 0.9885        & 0.9892\uparrow  & 0.9946\uparrow  \\
 		\multicolumn{9}{c}{\textbf{特征编码后}}                                                                                                                                   \\
 		Acc     & 99.19\%          & 98.72\%\uparrow & 98.70\%\uparrow & 97.27\%        & 97.14\%\downarrow & 98.94\%\uparrow & 98.85\%       & 98.91\%\uparrow & 99.46\%\uparrow \\
 		f1\_mac & 0.5378\downarrow & 0.3871\uparrow  & 0.4090\uparrow  & 0.2166         & 0.3197\downarrow  & 0.4166\uparrow  & 0.495\uparrow & 0.52\uparrow    & 0.53\uparrow    \\
@@ -600,6 +694,7 @@ $FN$(False Negatives)表示错误地将正类预测为负类。
 		          & DT    & LR    & KNN   & NB    & Ada   & ResN  & BiG   & RB-NMF & RB-MF \\
 		\midrule
 		\multicolumn{10}{c}{\textbf{过采样前}}                                             \\
+		\multicolumn{10}{c}{\textbf{过采样前}}                                             \\
 		Fuzzers   & 0.825 & 0.624 & 0.614 & 0.019 & 0.064 & 0.713 & 0.709 & 0.699  & 0.842 \\
 		Analysis  & 0.115 & 0     & 0     & 0.566 & 0.844 & 0     & 0     & 0      & 0.361 \\
 		Backdoors & 0     & 0     & 0     & 0     & 0.059 & 0     & 0     & 0      & 0.288 \\
@@ -611,6 +706,7 @@ $FN$(False Negatives)表示错误地将正类预测为负类。
 		Worms     & 0     & 0     & 0     & 0.75  & 0     & 0     & 0     & 0      & 0     \\
 		normal    & 1     & 0.997 & 0.997 & 0.993 & 0.99  & 0.998 & 0.999 & 0.999  & 0.999 \\
 		\midrule
+		\multicolumn{10}{c}{\textbf{过采样后}}                                             \\
 		\multicolumn{10}{c}{\textbf{过采样后}}                                             \\
 		Fuzzers   & 0.838 & 0.041 & 0.701 & 0.099 & 0.606 & 0.723 & 0.714 & 0.703  & 0.857 \\
 		Analysis  & 0.452 & 0.032 & 0.565 & 0     & 0     & 0.013 & 0     & 0      & 0.564 \\
@@ -638,6 +734,7 @@ $FN$(False Negatives)表示错误地将正类预测为负类。
 		          & DT    & LR    & KNN   & NB    & Ada   & ResN  & BiG   & RB-NMF & RB-MF \\
 		\midrule
 		\multicolumn{10}{c}{\textbf{过采样前}}                                             \\
+		\multicolumn{10}{c}{\textbf{过采样前}}                                             \\
 		Fuzzers   & 0.659 & 0.455 & 0.497 & 0.667 & 0.545 & 0.542 & 0.534 & 0.536  & 0.697 \\
 		Analysis  & 1     & 0     & 0     & 0.117 & 0.054 & 0     & 0     & 0      & 0.201 \\
 		Backdoors & 0.0   & 0.0   & 0     & 0     & 0.092 & 0     & 0     & 0      & 0     \\
@@ -649,6 +746,7 @@ $FN$(False Negatives)表示错误地将正类预测为负类。
 		Worms     & 0.0   & 0     & 0     & 0.009 & 0     & 0     & 0     & 0      & 0     \\
 		normal    & 1     & 0.998 & 0.997 & 0.998 & 0.99  & 0.998 & 0.999 & 0.999  & 0.999 \\
 		\midrule
+		\multicolumn{10}{c}{\textbf{过采样后}}                                             \\
 		\multicolumn{10}{c}{\textbf{过采样后}}                                             \\
 		Fuzzers   & 0.756 & 0.22  & 0.409 & 0.427 & 0.465 & 0.566 & 0.512 & 0.536  & 0.772 \\
 		Analysis  & 0.065 & 0.037 & 0.147 & 0     & 0     & 0.052 & 0     & 0      & 0.253 \\
@@ -733,6 +831,8 @@ iCaRL的一般步骤为数据特征的学习、记忆集的管理，以及通过
 		式中 & $P_c$  & 表示类别$c$的样本集； \\
 		     & $f(p)$ & 样本$p$的特征表示。   \\
 	\end{tabularx}\vspace{.5ex}
+		     & $f(p)$ & 样本$p$的特征表示。   \\
+	\end{tabularx}\vspace{.5ex}
 \end{flushleft}
 分类决策的公式如式~\ref{eq:class_dist}~所示。
 \begin{equation}
@@ -742,6 +842,9 @@ iCaRL的一般步骤为数据特征的学习、记忆集的管理，以及通过
 \begin{flushleft}
 	\renewcommand\arraystretch{1.25}
 	\begin{tabularx}{\textwidth}{@{}>{\normalsize\rm}l@{\quad}>{\normalsize\rm}l@{——}>{\normalsize\rm}X@{}}
+		式中 & $\hat{y}$          & 表示预测的类别；                                  \\
+		     & $|f(x) - \mu_c|_2$ & 测试样本特征表示与类别$c$的类中心之间的欧氏距离。 \\
+	\end{tabularx}\vspace{.5ex}
 		式中 & $\hat{y}$          & 表示预测的类别；                                  \\
 		     & $|f(x) - \mu_c|_2$ & 测试样本特征表示与类别$c$的类中心之间的欧氏距离。 \\
 	\end{tabularx}\vspace{.5ex}
@@ -835,6 +938,16 @@ iCaRL的一般步骤为数据特征的学习、记忆集的管理，以及通过
 		0.1                   & Exploits          & 4.347826\%          & 44                \\
 		0.4                   & Generic           & 17.391304\%         & 174               \\
 		0.1                   & Worms             & 4.347826\%          & 43                \\
+		0.2                   & normal            & 8.695652\%          & 87                \\
+		0.3                   & Fuzzers           & 13.043478\%         & 130               \\
+		0.1                   & Recon             & 4.347826\%          & 44                \\
+		0.5                   & Shellcode         & 21.73913\%          & 217               \\
+		0.3                   & Analysis          & 13.043478\%         & 130               \\
+		0.1                   & Backdoors         & 4.347826\%          & 44                \\
+		0.2                   & DoS               & 8.695652\%          & 87                \\
+		0.1                   & Exploits          & 4.347826\%          & 44                \\
+		0.4                   & Generic           & 17.391304\%         & 174               \\
+		0.1                   & Worms             & 4.347826\%          & 43                \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -864,8 +977,26 @@ iCaRL的一般步骤为数据特征的学习、记忆集的管理，以及通过
 	\begin{tabularx}{1.0\textwidth}{cl}
 		\toprule
 		\multicolumn{2}{l}{\textbf{遗传算法}}                                               \\
+		\multicolumn{2}{l}{\textbf{遗传算法}}                                               \\
 		\midrule
 		\multicolumn{2}{l}{\textbf{输入}: 种群大小 $P$，基因数量 $G$，代数 $N$，变异率 $M$} \\
+		\multicolumn{2}{l}{\textbf{输出}: 最优染色体}                                       \\
+		1  & 初始化种群(population)                                                         \\
+		2  & \textbf{for} generation \textbf{in} $N$:                                       \\
+		3  & \quad \textbf{for} individual \textbf{in} population:                          \\
+		4  & \quad\quad \#依据个体基因对应的抽样比率进行抽样                                \\
+		5  & \quad\quad train\_set = sampling(train\_set,gene)                              \\
+		6  & \quad\quad train(model, train\_set)                                            \\
+		7  & \quad\quad fitness = evaluate(model, test\_set)                                \\
+		8  & \quad \#根据个体适应度利用轮盘赌选择法进行选择                                 \\
+		9  & \quad $p1, p2$ = select\_parents(population, fitness)                          \\
+		10 & \quad $c1, c2$ = crossover($p1, p2$)                                           \\
+		11 & \quad mutate($c1$), mutate($c2$) with rate $M$                                 \\
+		12 & \quad add $c1, c2$ to population                                               \\
+		13 & \quad update\_fitness(population)                                              \\
+		14 & \quad \#根据个体适应度对应的淘汰概率利用轮盘赌选择法进行淘汰                   \\
+		15 & \quad eliminate\_individuals(population,fitness)                               \\
+		16 & \textbf{return} highest\_fitness\_chromosome(population)                       \\
 		\multicolumn{2}{l}{\textbf{输出}: 最优染色体}                                       \\
 		1  & 初始化种群(population)                                                         \\
 		2  & \textbf{for} generation \textbf{in} $N$:                                       \\
@@ -905,7 +1036,16 @@ NSL-KDD数据集由41个特征组成，整体包括八个文件，分成四组�
 	\begin{tabularx}{\textwidth}{cXc}
 		\toprule
 		\textbf{文件名}         & \textbf{描述}                                                  & \textbf{记录总数} \\
+		\textbf{文件名}         & \textbf{描述}                                                  & \textbf{记录总数} \\
 		\midrule
+		KDDTrain+.ARFF          & 完整的NSL-KDD训练集以二进制标签的ARFF格式提供                  & 125973            \\
+		KDDTrain+.TXT           & 完整的NSL-KDD训练集，包括攻击类型标签和难度级别，以CSV格式提供 & 125973            \\
+		KDDTrain+20Percent.ARFF & KDDTrain+.arff文件的20\%子集                                   & 25192             \\
+		KDDTrain+20Percent.TXT  & KDDTrain+.txt文件的20\%子集                                    & 25192             \\
+		KDDTest+.ARFF           & 完整的NSL-KDD测试集以二进制标签的ARFF格式提供                  & 22544             \\
+		KDDTest+.TXT            & 完整的NSL-KDD测试集，包括攻击类型标签和难度级别，以CSV格式提供 & 22544             \\
+		KDDTest-21.ARFF         & 不包含难度级别为21的记录的KDDTest+.arff文件的子集              & 11850             \\
+		KDDTest-21.TXT          & 不包含难度级别为21的记录的KDDTest+.txt文件的子集               & 11850             \\
 		KDDTrain+.ARFF          & 完整的NSL-KDD训练集以二进制标签的ARFF格式提供                  & 125973            \\
 		KDDTrain+.TXT           & 完整的NSL-KDD训练集，包括攻击类型标签和难度级别，以CSV格式提供 & 125973            \\
 		KDDTrain+20Percent.ARFF & KDDTrain+.arff文件的20\%子集                                   & 25192             \\
@@ -925,7 +1065,12 @@ NSL-KDD数据集中包含的攻击流量可分为拒绝服务攻击（DoS）、�
 	\begin{tabularx}{\textwidth}{@{}ccX@{}}
 		\toprule
 		\multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{子类}}                                                                                                                \\
+		\multicolumn{1}{c}{\textbf{种类}} & \multicolumn{1}{c}{\textbf{数量}} & \multicolumn{1}{c}{\textbf{子类}}                                                                                                                \\
 		\midrule
+		DoS                               & 11                                & apache2, back, land, neptune, mailbomb, pod, processtable, smurf, teardrop, dupstorm, worm                                                       \\
+		Probe                             & 6                                 & ipsweep, mscan, nmap, portsweep, saint, satan                                                                                                    \\
+		U2R                               & 7                                 & buffer\_overflow, loadmodule, perl, ps, rootkit, sqlattack, xterm                                                                                \\
+		R2L                               & 15                                & ftp\_write, guess\_passwd, httptunnel, imap, multihop, named, phf, sendmail, snmpattack, spy, snmpguess, warezclient, warezmaster, xlock, xsnoop \\
 		DoS                               & 11                                & apache2, back, land, neptune, mailbomb, pod, processtable, smurf, teardrop, dupstorm, worm                                                       \\
 		Probe                             & 6                                 & ipsweep, mscan, nmap, portsweep, saint, satan                                                                                                    \\
 		U2R                               & 7                                 & buffer\_overflow, loadmodule, perl, ps, rootkit, sqlattack, xterm                                                                                \\
@@ -940,6 +1085,7 @@ NSL-KDD数据集中包含的攻击流量可分为拒绝服务攻击（DoS）、�
 	\centering
 	\begin{tabular}{ccccccc}
 		\toprule
+		\textbf{数据集}                & \textbf{总数}           & \textbf{Normal} & \textbf{DoS} & \textbf{Probe} & \textbf{R2L} & \textbf{U2R} \\
 		\textbf{数据集}                & \textbf{总数}           & \textbf{Normal} & \textbf{DoS} & \textbf{Probe} & \textbf{R2L} & \textbf{U2R} \\
 		\midrule
 		\multirow{2}{*}{KDDTrain+}     & \multirow{2}{*}{125973} & 67343           & 45927        & 11656          & 995          & 52           \\
@@ -984,6 +1130,7 @@ NSL-KDD数据集中包含的攻击流量可分为拒绝服务攻击（DoS）、�
 \begin{figure}[h]
 	\centering
 	\includegraphics[width=0.8\textwidth]{icarl_accuracy.png}
+	\caption{增量学习后各模型在混合测试集上准确率对比柱状图}
 	\caption{增量学习后各模型在混合测试集上准确率对比柱状图}
 	\label{fig:acc_icarl}
 \end{figure}
