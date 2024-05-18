@@ -6,60 +6,46 @@
 %% Last modified: 2019-11-01 09:26
 %%================================================
 \begin{cabstract}
-在高速信息化的时代背景下，带宽的数量级不断提升，数据连接速度愈发迅捷，网络技术也日新月异，这些变革为用户带来了前所未有的体验。
-然而，与之相伴的是网络攻击形式也愈发多样和复杂，为新形势下的网络安全带来了严峻挑战。
-当网络信息系统遭受攻击时，如何迅速而有效地应对，成为摆在我们面前的一大难题。
-这包括但不限于如何精准地检测到攻击行为、如何确定攻击者的真实身份，以及如何及时采取相应措施进行防御。
+在高速信息化的时代浪潮中，带宽的数量级不断攀升，数据传输速度愈发迅猛，网络技术更是日新月异，为用户带来了前所未有的便捷体验。
+然而，与此同时，网络攻击的形式也愈发多样化和复杂化，给新形势下的网络安全带来了前所未有的严峻挑战。
+异常流量检测技术，作为能够有效检测未知网络攻击的重要手段，已然成为网络安全领域的核心研究方向。
+然而，现有的检测模型往往仅聚焦于流量数据的空间维度特征，这在面对日益复杂且多维度的流量数据时显得力不从心，极大地削弱了模型的检测效能。
+此外，当前的网络攻击检测技术多依赖于静态数据集，这在瞬息万变的网络环境中显得尤为捉襟见肘，实际应用中面临着诸多未知的挑战。
+更为严重的是，当模型在实际运行时，可能会遭遇DDoS等恶意攻击，导致模型负担过重，甚至面临崩溃的风险。
 这些问题迫切需要得到有效的解决。
-基于当前的技术调研与分析，本文在网络攻击检测和网络攻击溯源两个关键研究方向上进行了深入的研究。
-分别作出了以下工作：\par
-(1) 鉴于传统概率包标记法在网络溯源领域存在的溯源准确率低、溯源速度慢等弊端，本文进行了针对性的改进，提出了一种新颖的基于路由器接口分组概率包标记的方案。
-该方案通过三个精心设计的阶段——路由器标记、数据包收集与路径重构，实现了高效的网络溯源。
-在路由器标记阶段，我们充分利用数据包传输过程中经过的路由器信息，对其进行标记写入到数据包中，从而有效收集数据包在网络中的传输路径。
-随后，在数据包收集阶段，我们从这些标记数据包中提取这些标记信息，并启动相应的路径重构程序。
-最后，在路径重构阶段，我们巧妙运用异或运算的特性，从收集的标记信息中解析出具体的路由器接口号序列路径，再通过递归的方式，我们便可踪到数据包的发送源。
-实验评估证明，与传统的PPM方案相比，本方案在溯源速度和准确性上均表现出色，为网络溯源任务提供了强有力的支持。\par
+本文对当前的技术进行了调研与分析，分别作出了以下工作：\par
 
-(2) 针对当前攻击检测模型不能充分利用流量数据中的空间特征与时序特征，本文提出了一种基于残差网络与双向门控循环单元多模态特征融合的模型。
+1)~针对现有检测模型往往仅关注流量数据的空间特征，而忽视多维度特征的综合考量，导致异常检测效果存在局限性的问题，本文提出了一种基于残差网络与双向门控循环单元的多模态特征融合模型。
 该模型结合了残差网络和双向门控循环单元的优势，有效挖掘流量数据的时空特征，并通过综合分析产生更为精准的决策。
-在UNSW-NB15数据集上的实验对比显示，本模型在准确率方面相较传统机器学习模型以及ResNet、BiGRU等模型具有显著优势，为攻击检测任务提供了更加可靠的解决方案。\par
+在UNSW-NB15数据集上的实验结果显示，该模型准确率达99.46\%,并在各类攻击样本的精度和召回率指标上也取得了不错的表现,为攻击检测任务提供了可靠的解决方案。\par
 
-(3) 针对传统攻击检测模型难以适应动态变化的网络攻击环境，本文创新性地将所提出的RNB-MF模型与iCaRL策略相结合，设计出了一套高效的增量学习方案。
-这一方案不仅继承了RNB-MF模型在特征提取和攻击检测方面的优势，还借助iCaRL策略实现了对模型知识的有效保留和更新。
-通过不断地学习新的攻击模式，同时保留对已知攻击的检测能力，该方案显著提高了模型在复杂多变环境下的适应性。
-此外，为了进一步提升方案的性能，本文还引入了基于遗传算法的记忆集优化方法。
-通过对记忆集进行智能优化，该方法有效提高了模型在增量学习过程中的效率和准确性，进一步增强了方案的实用性。
-最后经过实验验证，该方案能够使模型不断适应日益变化的网络攻击环境，确保网络安全的持续性和稳定性。\par
+2)~针对传统攻击检测模型难以适应动态变化的网络攻击环境问题，本文将所提出的融合模型与iCaRL策略相结合，并基于遗传算法对iCaRL记忆集进行了抽样优化，最终实现了一套有效的增量学习方案。
+这一方案不仅继承了融合模型在特征提取和攻击检测方面的优势，还通过iCaRL策略实现了模型对旧知识的有效记忆和新知识的持续学习。
+此外，为了进一步提升方案的性能，本文还提出了一种基于遗传算法的记忆集抽样优化方法，进一步提升了方案的表现效果。
+最后通过利用UNSW-NB15和NSL-KDD数据集分别作为新旧任务数据集对该方案进行了实验验证。
+实验结果显示，当模型在经过旧任务数据集的训练以及新任务数据集的增量学习后，模型在新旧任务混合数据集上准确率达78.1\%，而在旧任务数据集上的准确率维持在75\%以上。
+这些结果表明，该方案能够不断适应日益变化的网络攻击环境，确保网络安全的持续性和稳定性。\par
+
+3)~针对检测模型在实际运行过程中可能面临DDoS攻击威胁的问题，本文提出了基于路由器接口号成组标记溯源方法，之后在此基础上本文设计并实现了基于溯源的模型防护方法。
+为验证该溯源方法的效果，本文利用CAIDA IPv4 Prefix-Probing Traceroute数据集对其进行了溯源速度测试。
+实验结果表明，在使用“组数”为4的条件下，仅需收集65个数据包，该方法便能成功追踪到距离接收结点30跳路由器的数据发送结点。
+紧接着，本文进一步利用NS-3模拟器构造了一个网络仿真环境，以测试该方法在面对实际DDoS攻击时的溯源准确率。
+实验结果显示，随着攻击节点数量不断增加，直至达到100个的情况下，溯源准确率依然能够稳定在90\%以上。
+最后，为验证防护方法在模型实际运行时的表现效果，本文通过VMWare WorkStation构建了一个高度仿真的网络攻击环境，对防护方法进行了实验验证。
+实验结果表明，该防护方法能够有效定位攻击者的最近邻路由器，并依托该路由器实现对攻击流量的过滤，从而保障检测模型的稳定运行和服务器的安全无虞。
 \end{cabstract}
 
 \ckeywords{异常检测, 网络溯源, 深度学习, 数据包标记法, 残差网络, 增量学习, 门控循环单元}
 
 \begin{eabstract} 
 
-In the backdrop of rapid information age advancements, the magnitude of bandwidth continues to soar, data connection speeds are increasingly swift, and network technology evolves by the day.
-These changes have ushered in unprecedented user experiences. However, accompanying these advancements, the diversity and complexity of cyberattacks have also increased, posing severe challenges to cybersecurity in this new era. Rapid and effective response strategies to cyberattacks are crucial challenges we face, encompassing precise attack detection, accurate identification of attackers, and timely defensive measures. 
-These issues urgently need effective solutions. 
-Based on current technical research and analysis, this paper delves deeply into two key research directions: cyberattack detection and cyberattack provenance. 
-The contributions are as follows:
+    In the tide of the high-speed information era, the magnitude of bandwidth is constantly climbing, and the speed of data transmission is becoming increasingly rapid. Network technology is evolving day by day, bringing users an unprecedented convenient experience. However, at the same time, the forms of network attacks have become more diverse and complex, posing unprecedented severe challenges to network security in the new situation. Anomaly traffic detection technology, as an important means to effectively detect unknown network attacks, has become a core research direction in the field of network security. Yet, existing detection models often focus only on the spatial dimension features of traffic data, which appears inadequate in the face of increasingly complex and multi-dimensional traffic data, greatly weakening the detection efficacy of the models. Moreover, current network attack detection technologies rely heavily on static datasets, which seem particularly inadequate in the ever-changing network environment, facing many unknown challenges in practical applications. More seriously, when the model is in actual operation, it may encounter malicious attacks such as DDoS, leading to an excessive burden on the model, and even the risk of collapse. These issues urgently need to be effectively resolved. This paper conducts research and analysis on current technologies and makes the following works:
 
-
-  (1) Given the low accuracy and slow speed of traditional probability packet marking methods in cyber provenance, this paper introduces a novel scheme based on probabilistic packet marking at router interfaces. 
-  This scheme, through three meticulously designed phases—router marking, packet collection, and path reconstruction—achieves efficient cyber provenance.
-  During the router marking phase, we leverage the information of routers traversed during packet transmission to mark packets, effectively collecting the packets’ transmission paths within the network. 
-  Then, in the packet collection phase, we extract these markings and initiate the path reconstruction program. Finally, in the path reconstruction phase, we cleverly use the properties of XOR operations to decode the sequence of router interface numbers from the collected markings. 
-  Through recursion, we can trace the packet’s origin. Experimental evaluations demonstrate that our scheme significantly outperforms traditional PPM methods in speed and accuracy, providing strong support for cyber provenance tasks.\par
-  
-  
-  (2) Addressing the current attack detection models’ inability to fully utilize spatial and temporal features in traffic data, this paper proposes a multimodal feature fusion model based on residual networks and bidirectional gated recurrent units. 
-  This model combines the strengths of residual networks and bidirectional gated recurrent units to effectively mine spatiotemporal features in traffic data, resulting in more accurate decision-making. 
-  Experimental comparisons on the UNSW-NB15 dataset show that our model significantly surpasses traditional machine learning models and other models such as ResNet and BiGRU in accuracy, offering a more reliable solution for attack detection tasks.\par
-  
-  
-  (3) To tackle the challenge that traditional attack detection models face in adapting to the ever-changing landscape of network attacks, this paper combines the proposed RNB-MF model with the iCaRL strategy, designing an efficient incremental learning scheme. 
-  This scheme incorporates a memory set optimization method based on genetic algorithms, further enhancing the performance of the approach. 
-  Experiments on the UNSW-NB15 and NSL-KDD datasets demonstrate that our scheme supports incremental learning and knowledge retention, enabling the model to continuously adapt to evolving network attacks, thereby ensuring the sustainability and stability of cybersecurity.\par
-
+    1)~Addressing the issue that existing detection models often focus only on the spatial features of traffic data while neglecting the comprehensive consideration of multi-dimensional features, leading to limited effectiveness in anomaly detection, this paper proposes a multimodal feature fusion model based on residual networks and bidirectional gated recurrent units. This model combines the advantages of residual networks and bidirectional gated recurrent units to effectively mine the spatiotemporal features of traffic data and produce more accurate decision-making through comprehensive analysis. Experimental results on the UNSW-NB15 dataset show that the model has an accuracy rate of up to 99.46\%, and also performs well in terms of precision and recall rates for various types of attack samples, providing a more reliable solution for attack detection tasks.
+    
+    2)~In response to the problem that traditional attack detection models struggle to adapt to the dynamically changing network attack environment, this paper integrates the proposed fusion model with the iCaRL strategy and optimizes the iCaRL memory set using genetic algorithms, ultimately implementing an effective incremental learning scheme. This scheme not only inherits the advantages of the fusion model in feature extraction and attack detection but also realizes effective memory of old knowledge and continuous learning of new knowledge through the iCaRL strategy. Moreover, to further improve the performance of the scheme, this paper also proposes a memory set sampling optimization method based on genetic algorithms, further enhancing the performance of the scheme. Finally, the scheme was experimentally validated using the UNSW-NB15 and NSL-KDD datasets as new and old task datasets, respectively. The experimental results show that after the model has been trained on the old task dataset and undergone incremental learning on the new task dataset, the accuracy rate on the mixed dataset of new and old tasks reaches 78.1\%, while maintaining an accuracy rate of over 75\% on the old task dataset. These results indicate that the scheme can continuously adapt to the ever-changing network attack environment, ensuring the continuity and stability of network security.
+    
+    3)~Addressing the problem that detection models may face the threat of DDoS attacks during actual operation, this paper proposes a method based on router interface number grouping for traceback, and on this basis, designs and implements a model protection method based on traceback. To verify the effect of this traceback method, the paper conducted a traceback speed test using the CAIDA IPv4 Prefix-Probing Traceroute dataset. The experimental results show that with a "group number" of 4, only 65 packets need to be collected for the method to successfully trace the data sending node of a router 30 hops away from the receiving node. Subsequently, we further used the NS-3 simulator to construct a network simulation environment to test the traceback accuracy of this method in the face of actual DDoS attacks. The experimental results show that as the number of attack nodes increases, up to 100, the traceback accuracy can still be maintained at over 90\%. Finally, to verify the performance of the protection method in the actual operation of the model, the paper conducted an experimental verification of the protection method in a highly simulated network attack environment constructed using VMWare WorkStation. The experimental results show that the protection method can effectively locate the attacker's nearest neighbor router and rely on that router to filter attack traffic, thus ensuring the stable operation of the detection model and the security of the server.
 \end{eabstract}
 
-\ekeywords{anomaly detecion, network traffic, network traceback,
-packet marking traceback, deep learning, incremental learning}
+\ekeywords{anomaly detecion, network traceback, deep learning, packet marking, residual network, incremental learning, gated recurrent unit}
